@@ -1,0 +1,33 @@
+## Codebase Patterns
+- Use `uv` for dependency management (uv sync, uv run pytest, uv run ruff check)
+- Source code lives in `src/iceberg_explorer/` with packages: api/routes/, query/, models/, templates/
+- Pre-commit hooks configured: ruff (lint/format), pyupgrade (Python 3.11+)
+- Tests in `tests/` directory, run with `uv run pytest`
+
+---
+
+## 2026-01-11 - US-001
+Thread: https://ampcode.com/threads/T-019bab01-14f3-7755-b280-3c8fbe2d067d
+- What was implemented:
+  - Created pyproject.toml with FastAPI, DuckDB, Granian, OpenTelemetry dependencies
+  - Set up src/iceberg_explorer/ package structure with api/routes, query, models, templates subdirs
+  - Configured pre-commit hooks with ruff and pyupgrade
+  - Created README.md with development instructions
+  - Created basic test to verify version
+- Files changed:
+  - pyproject.toml (new)
+  - .pre-commit-config.yaml (new)
+  - README.md (new)
+  - src/iceberg_explorer/__init__.py (new)
+  - src/iceberg_explorer/main.py (new)
+  - src/iceberg_explorer/api/__init__.py (new)
+  - src/iceberg_explorer/api/routes/__init__.py (new)
+  - src/iceberg_explorer/query/__init__.py (new)
+  - src/iceberg_explorer/models/__init__.py (new)
+  - tests/__init__.py (new)
+  - tests/test_main.py (new)
+- **Learnings for future iterations:**
+  - hatchling build backend requires README.md to exist if referenced in pyproject.toml
+  - Use `uv sync --all-extras` to install dev dependencies
+  - pytest-asyncio requires `asyncio_default_fixture_loop_scope` setting in pyproject.toml for Python 3.14
+---

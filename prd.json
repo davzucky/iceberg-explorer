@@ -10,7 +10,8 @@
           "id": "US-001",
           "title": "Project Setup and Configuration",
           "description": "Set up a properly structured Python project with modern tooling.\n\n**What to do:**\n- Configure `pyproject.toml` with FastAPI, DuckDB, Granian dependencies\n- Set up source code in `src/iceberg_explorer/` structure\n- Configure pre-commit hooks (ruff, pyupgrade)\n- Set up configuration loading from JSON file with env var overrides\n\n**Acceptance criteria:**\n- Project uses `uv` for dependency management\n- `uv run pytest` runs successfully (empty test suite)\n- `uv run ruff check src/` passes",
-          "dependsOn": []
+          "dependsOn": [],
+          "passes": true
         },
         {
           "id": "US-002",
