@@ -12,7 +12,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
 
-from iceberg_explorer.models.catalog import ListNamespacesResponse
+from iceberg_explorer.models.catalog import (
+    ListNamespacesResponse,
+    ListTablesResponse,
+    TableIdentifier,
+)
 from iceberg_explorer.query.engine import get_engine
 
 router = APIRouter(prefix="/api/v1/catalog", tags=["catalog"])
@@ -145,3 +149,65 @@ async def list_namespaces(
                 namespaces.append(full_namespace)
 
     return ListNamespacesResponse(namespaces=namespaces)
+
+
+@router.get("/namespaces/{namespace}/tables", response_model=ListTablesResponse)
+async def list_tables(
+    namespace: str,
+) -> ListTablesResponse:
+    """List tables in a namespace.
+
+    Args:
+        namespace: Namespace path using unit separator (\\x1f) for multi-level.
+                  Example: accounting%1Ftax for accounting.tax
+
+    Returns:
+        ListTablesResponse with table identifiers.
+
+    Raises:
+        HTTPException: 404 if namespace doesn't exist.
+    """
+    engine = get_engine()
+
+    if not engine.is_initialized:
+        engine.initialize()
+
+    namespace_parts = _parse_namespace(namespace)
+    if not namespace_parts:
+        raise HTTPException(
+            status_code=400,
+            detail="Namespace cannot be empty",
+        )
+
+    catalog_name = engine.catalog_name
+
+    with engine.get_connection() as conn:
+        namespace_path = _build_namespace_path(catalog_name, namespace_parts)
+        try:
+            conn.execute(f"SELECT * FROM {namespace_path}.information_schema.schemata LIMIT 1")
+        except Exception as e:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Namespace not found: {'.'.join(namespace_parts)}",
+            ) from e
+
+        sql = f"SELECT table_name FROM {namespace_path}.information_schema.tables WHERE table_schema = '{namespace_parts[-1]}'"
+
+        try:
+            result = conn.execute(sql).fetchall()
+        except Exception as e:
+            if "does not exist" in str(e).lower() or "not found" in str(e).lower():
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Namespace not found: {'.'.join(namespace_parts)}",
+                ) from e
+            raise
+
+        identifiers: list[TableIdentifier] = []
+        for row in result:
+            table_name = row[0]
+            identifiers.append(
+                TableIdentifier(namespace=namespace_parts, name=table_name)
+            )
+
+    return ListTablesResponse(identifiers=identifiers)
