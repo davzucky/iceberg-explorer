@@ -6,7 +6,9 @@
 - Configuration uses pydantic-settings with env var prefix `ICEBERG_EXPLORER_` and `__` delimiter for nesting
 - Use `get_settings()` for cached settings, `reset_settings()` in tests to clear cache
 - Use `get_engine()` for cached DuckDB engine, `reset_engine()` in tests to clear cache
+- Use `get_executor()` for cached QueryExecutor, `reset_executor()` in tests to clear cache
 - DuckDB returns settings as native types (int for threads, MiB/GiB strings for memory) - don't assume string format
+- Use `validate_sql()` to check SQL before execution; blocks INSERT, UPDATE, DELETE, DROP, CREATE, ALTER, etc.
 
 ---
 
@@ -72,4 +74,30 @@ Thread: https://ampcode.com/threads/T-019bab05-bab4-732b-8d16-26b8c8ea9e36
   - DuckDB converts memory units (e.g., 1GB becomes ~953.6 MiB)
   - Use mock patching for _attach_catalog when testing engine init without real catalog
   - Combine pytest.raises with context manager using `with ..., ...` syntax (ruff SIM117)
+---
+
+## 2026-01-11 - US-004
+Thread: https://ampcode.com/threads/T-019bab08-d892-72cf-b151-1945e8347cff
+- What was implemented:
+  - Created QueryExecutor class in query/executor.py
+  - SQL validation to reject write operations (INSERT, UPDATE, DELETE, DROP, CREATE, ALTER, etc.)
+  - Query execution with configurable timeout (10s - 3600s)
+  - Results returned as Arrow batches for streaming
+  - Execution metrics tracking (duration, rows returned)
+  - Query cancellation via threading.Event interrupt
+  - Query state management (pending, running, completed, failed, cancelled)
+  - Global executor singleton with get_executor() and reset_executor()
+  - Created query/models.py with QueryResult, ExecutionMetrics, QueryState, custom exceptions
+  - Comprehensive test coverage (48 new tests, 87 total)
+  - Added pyarrow dependency
+- Files changed:
+  - src/iceberg_explorer/query/executor.py (new)
+  - src/iceberg_explorer/query/models.py (new)
+  - tests/test_executor.py (new)
+  - pyproject.toml (updated - added pyarrow)
+- **Learnings for future iterations:**
+  - DuckDB fetch_arrow_table() returns a PyArrow Table that can be converted to batches
+  - Use threading.Event for cancellation signaling between threads
+  - Ruff SIM114 prefers combining multiple if-elif with same body into tuple check
+  - Always reset_executor() in test fixtures alongside reset_engine() and reset_settings()
 ---
