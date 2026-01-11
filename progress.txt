@@ -5,6 +5,8 @@
 - Tests in `tests/` directory, run with `uv run pytest`
 - Configuration uses pydantic-settings with env var prefix `ICEBERG_EXPLORER_` and `__` delimiter for nesting
 - Use `get_settings()` for cached settings, `reset_settings()` in tests to clear cache
+- Use `get_engine()` for cached DuckDB engine, `reset_engine()` in tests to clear cache
+- DuckDB returns settings as native types (int for threads, MiB/GiB strings for memory) - don't assume string format
 
 ---
 
@@ -50,4 +52,24 @@ Thread: https://ampcode.com/threads/T-019bab03-7ff1-732f-beaa-357a8a32c653
   - pydantic-settings handles env var prefix and nested delimiter automatically
   - Use model_validator(mode="before") to load from JSON before other validation
   - Always use autouse fixture to reset_settings() in config tests to prevent state leakage
+---
+
+## 2026-01-11 - US-003
+Thread: https://ampcode.com/threads/T-019bab05-bab4-732b-8d16-26b8c8ea9e36
+- What was implemented:
+  - Created DuckDBEngine class in query/engine.py
+  - Connection manager with thread-safe initialization
+  - Iceberg catalog attachment (REST and local catalog types)
+  - Configurable memory limit and thread count from DuckDBConfig
+  - Health check method verifying DuckDB and catalog connectivity
+  - Global engine singleton with get_engine() and reset_engine()
+  - Comprehensive test coverage (19 tests)
+- Files changed:
+  - src/iceberg_explorer/query/engine.py (new)
+  - tests/test_engine.py (new)
+- **Learnings for future iterations:**
+  - DuckDB returns settings as native types (int for threads) not strings
+  - DuckDB converts memory units (e.g., 1GB becomes ~953.6 MiB)
+  - Use mock patching for _attach_catalog when testing engine init without real catalog
+  - Combine pytest.raises with context manager using `with ..., ...` syntax (ruff SIM117)
 ---

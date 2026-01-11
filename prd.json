@@ -29,7 +29,8 @@
           "id": "US-003",
           "title": "DuckDB Engine Initialization",
           "description": "Create DuckDB engine that connects to Iceberg catalogs.\n\n**What to do:**\n- Create DuckDB connection pool/manager class\n- Attach Iceberg catalog (REST or local) on initialization\n- Enforce read-only mode at DuckDB level\n- Make memory limit and thread count configurable\n- Add health check method to verify catalog connectivity\n\n**Files:**\n- src/iceberg_explorer/query/engine.py\n\n**Acceptance criteria:**\n- Unit tests with local Iceberg catalog fixture\n- `uv run pytest` passes\n- `uv run ruff check src/` passes",
-          "dependsOn": ["US-002"]
+          "dependsOn": ["US-002"],
+          "passes": true
         },
         {
           "id": "US-004",

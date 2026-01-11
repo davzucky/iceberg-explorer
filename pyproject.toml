@@ -18,6 +18,7 @@ classifiers = [
 dependencies = [
     "fastapi>=0.115.0",
     "duckdb>=1.1.0",
+    "pyarrow>=17.0.0",
     "granian>=1.6.0",
     "pydantic>=2.9.0",
     "pydantic-settings>=2.5.0",
