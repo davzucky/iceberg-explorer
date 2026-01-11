@@ -95,7 +95,8 @@
           "id": "US-011",
           "title": "Query Status Endpoint",
           "description": "API endpoint to check query status.\n\n**What to do:**\n- `GET /api/v1/query/{query_id}/status` returns current state\n- States: pending, running, completed, failed, cancelled\n- Include progress info for running queries (rows processed)\n- Include error message for failed queries\n\n**Files:**\n- src/iceberg_explorer/api/routes/query.py\n\n**Acceptance criteria:**\n- Unit tests for state transitions\n- `uv run pytest` passes",
-          "dependsOn": ["US-009"]
+          "dependsOn": ["US-009"],
+          "passes": true
         },
         {
           "id": "US-012",

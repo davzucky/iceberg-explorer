@@ -220,3 +220,24 @@ Thread: https://ampcode.com/threads/T-019bab1d-6802-73fd-b738-5db375649ca6
   - Use Pydantic Field constraints (ge, le) for timeout range validation at API boundary
   - Mock get_executor() and return MagicMock(spec=QueryResult) for API tests
 ---
+
+## 2026-01-11 - US-011
+Thread: https://ampcode.com/threads/T-019bab35-8212-73d9-82f1-718c11808f99
+- What was implemented:
+  - Created QueryStatusResponse Pydantic model with query_id, status, rows_processed, error_message fields
+  - GET /api/v1/query/{query_id}/status endpoint for checking query status
+  - Returns current state (pending, running, completed, failed, cancelled)
+  - Returns rows_processed for running/completed queries
+  - Returns error_message for failed queries
+  - 404 for non-existent queries, 400 for invalid query ID format
+  - 10 new tests (71 query API tests total, 221 overall)
+- Files changed:
+  - src/iceberg_explorer/models/query.py (updated - added QueryStatusResponse)
+  - src/iceberg_explorer/models/__init__.py (updated - exports)
+  - src/iceberg_explorer/api/routes/query.py (updated - added get_query_status endpoint)
+  - tests/test_query_api.py (updated - added TestQueryStatusEndpoint)
+- **Learnings for future iterations:**
+  - Reuse executor.get_status() which returns QueryResult with state and metrics
+  - QueryState enum values match expected API status strings (pending, running, etc.)
+  - Follow existing pattern: 400 for invalid input format, 404 for not found
+---
