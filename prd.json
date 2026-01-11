@@ -167,7 +167,8 @@
           "id": "US-020",
           "title": "Health and Readiness Endpoints",
           "description": "Health check endpoints for monitoring.\n\n**What to do:**\n- `GET /health` returns status, version, component health\n- `GET /ready` returns readiness for traffic\n- Check DuckDB connectivity in health\n- Check catalog connectivity in health\n- Return 503 if unhealthy\n\n**Files:**\n- src/iceberg_explorer/api/routes/health.py\n\n**Acceptance criteria:**\n- Unit tests for health logic\n- `uv run pytest` passes",
-          "dependsOn": ["US-003"]
+          "dependsOn": ["US-003"],
+          "passes": true
         },
         {
           "id": "US-021",

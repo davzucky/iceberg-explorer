@@ -263,3 +263,24 @@ Thread: https://ampcode.com/threads/T-019bab38-4b01-775c-9ef2-d8393f1a4abb
   - executor.cancel() returns False for terminal queries (completed/failed/cancelled)
   - Query status and cancel endpoint patterns are identical for error handling
 ---
+
+## 2026-01-11 - US-020
+Thread: https://ampcode.com/threads/T-019bab3b-5c4a-72f9-91e4-c22e62efa689
+- What was implemented:
+  - Created health routes with GET /health and GET /ready endpoints
+  - /health returns status (healthy/degraded/unhealthy), version, and component health
+  - /ready returns readiness status with reason if not ready
+  - Checks DuckDB connectivity and catalog accessibility via engine.health_check()
+  - Returns 503 status code when unhealthy
+  - Pydantic models: ComponentHealth, HealthResponse, ReadyResponse
+  - Registered health router in main.py
+  - 18 new tests (249 total)
+- Files changed:
+  - src/iceberg_explorer/api/routes/health.py (new)
+  - src/iceberg_explorer/main.py (updated - router registration)
+  - tests/test_health.py (new)
+- **Learnings for future iterations:**
+  - Reuse engine.health_check() which returns dict with healthy, duckdb, catalog, error keys
+  - FastAPI Response parameter allows setting status_code dynamically
+  - Use 503 for unhealthy/not ready responses per HTTP conventions
+---
