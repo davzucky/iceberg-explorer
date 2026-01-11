@@ -1,1 +1,15 @@
 """Models package for Iceberg Explorer."""
+
+from iceberg_explorer.models.catalog import (
+    ListNamespacesResponse,
+    ListTablesResponse,
+    NamespaceIdentifier,
+    TableIdentifier,
+)
+
+__all__ = [
+    "ListNamespacesResponse",
+    "ListTablesResponse",
+    "NamespaceIdentifier",
+    "TableIdentifier",
+]

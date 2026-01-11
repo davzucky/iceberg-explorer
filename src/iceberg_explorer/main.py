@@ -2,11 +2,15 @@
 
 from fastapi import FastAPI
 
+from iceberg_explorer.api.routes.catalog import router as catalog_router
+
 app = FastAPI(
     title="Iceberg Explorer",
     description="High-performance web application for interactive exploration of Apache Iceberg data lakes",
     version="0.1.0",
 )
+
+app.include_router(catalog_router)
 
 
 @app.get("/")
