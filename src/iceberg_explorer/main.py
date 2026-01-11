@@ -2,6 +2,7 @@
 
 from fastapi import FastAPI
 
+from iceberg_explorer import __version__
 from iceberg_explorer.api.routes.catalog import router as catalog_router
 from iceberg_explorer.api.routes.health import router as health_router
 from iceberg_explorer.api.routes.query import router as query_router
@@ -9,7 +10,7 @@ from iceberg_explorer.api.routes.query import router as query_router
 app = FastAPI(
     title="Iceberg Explorer",
     description="High-performance web application for interactive exploration of Apache Iceberg data lakes",
-    version="0.1.0",
+    version=__version__,
 )
 
 app.include_router(catalog_router)
@@ -27,7 +28,10 @@ def main() -> None:
     """Run the application server."""
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    from iceberg_explorer.config import get_settings
+
+    settings = get_settings()
+    uvicorn.run(app, host=settings.server.host, port=settings.server.port)
 
 
 if __name__ == "__main__":

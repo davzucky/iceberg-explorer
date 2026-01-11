@@ -73,8 +73,12 @@ def validate_sql(sql: str) -> None:
     if not stripped:
         raise InvalidSQLError("Empty SQL query")
 
-    if FORBIDDEN_PATTERN.search(stripped):
-        match = FORBIDDEN_PATTERN.search(stripped)
+    # Enforce single-statement queries (prevents `SELECT ...; DROP ...`).
+    if ";" in stripped.rstrip(";"):
+        raise InvalidSQLError("Multiple statements or semicolons are not allowed")
+
+    match = FORBIDDEN_PATTERN.search(stripped)
+    if match:
         keyword = match.group(1).upper() if match else "unknown"
         raise InvalidSQLError(f"Write operations are not allowed: {keyword}")
 
@@ -105,6 +109,7 @@ class QueryExecutor:
         self._settings = get_settings()
         self._active_queries: dict[UUID, QueryResult] = {}
         self._cancel_flags: dict[UUID, threading.Event] = {}
+        self._active_conn: dict[UUID, duckdb.DuckDBPyConnection] = {}
         self._lock = threading.Lock()
 
     def _validate_timeout(self, timeout: int | None) -> int:
@@ -149,8 +154,6 @@ class QueryExecutor:
         try:
             result.set_running()
             self._execute_query(result, validated_timeout, cancel_event)
-        except Exception:
-            raise
         finally:
             with self._lock:
                 self._cancel_flags.pop(result.query_id, None)
@@ -171,11 +174,15 @@ class QueryExecutor:
         execution_complete = threading.Event()
 
         def run_query() -> None:
+            conn: duckdb.DuckDBPyConnection | None = None
             try:
                 if cancel_event.is_set():
                     return
 
                 with self._engine.get_connection() as conn:
+                    with self._lock:
+                        self._active_conn[result.query_id] = conn
+
                     if cancel_event.is_set():
                         return
 
@@ -190,6 +197,8 @@ class QueryExecutor:
                 if not cancel_event.is_set():
                     exception_holder.append(e)
             finally:
+                with self._lock:
+                    self._active_conn.pop(result.query_id, None)
                 execution_complete.set()
 
         thread = threading.Thread(target=run_query, daemon=True)
@@ -199,6 +208,14 @@ class QueryExecutor:
 
         if not completed:
             cancel_event.set()
+            with self._lock:
+                active_conn = self._active_conn.get(result.query_id)
+                if active_conn is not None:
+                    try:
+                        active_conn.interrupt()
+                    except Exception:
+                        pass
+                    self._active_conn.pop(result.query_id, None)
             result.set_failed("Query timeout exceeded")
             raise QueryTimeoutError(f"Query exceeded {timeout}s timeout")
 
@@ -223,6 +240,7 @@ class QueryExecutor:
         with self._lock:
             cancel_event = self._cancel_flags.get(query_id)
             result = self._active_queries.get(query_id)
+            active_conn = self._active_conn.get(query_id)
 
         if cancel_event is None or result is None:
             return False
@@ -231,6 +249,14 @@ class QueryExecutor:
             return False
 
         cancel_event.set()
+
+        if active_conn is not None:
+            try:
+                active_conn.interrupt()
+            except Exception:
+                pass
+            with self._lock:
+                self._active_conn.pop(query_id, None)
 
         if result.state == QueryState.RUNNING:
             result.set_cancelled()
@@ -258,6 +284,7 @@ class QueryExecutor:
         with self._lock:
             self._active_queries.pop(query_id, None)
             self._cancel_flags.pop(query_id, None)
+            self._active_conn.pop(query_id, None)
 
 
 _executor: QueryExecutor | None = None

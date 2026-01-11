@@ -78,16 +78,17 @@ class DuckDBEngine:
         conn.execute("INSTALL iceberg")
         conn.execute("LOAD iceberg")
 
+        quoted_catalog_name = '"' + catalog_name.replace('"', '""') + '"'
         if catalog_config.type == CatalogType.REST:
             attach_sql = f"""
-                ATTACH '{catalog_config.uri}' AS {catalog_name} (
+                ATTACH '{catalog_config.uri}' AS {quoted_catalog_name} (
                     TYPE ICEBERG,
                     ENDPOINT_TYPE REST
                 )
             """
         else:
             attach_sql = f"""
-                ATTACH '{catalog_config.warehouse}' AS {catalog_name} (
+                ATTACH '{catalog_config.warehouse}' AS {quoted_catalog_name} (
                     TYPE ICEBERG
                 )
             """
@@ -134,11 +135,12 @@ class DuckDBEngine:
         if self._connection is None:
             raise RuntimeError("Engine not initialized. Call initialize() first.")
 
-        cursor = self._connection.cursor()
-        try:
-            yield cursor
-        finally:
-            cursor.close()
+        with self._lock:
+            cursor = self._connection.cursor()
+            try:
+                yield cursor
+            finally:
+                cursor.close()
 
     def health_check(self) -> dict[str, bool | str]:
         """Check health of DuckDB and catalog connectivity.
@@ -169,7 +171,8 @@ class DuckDBEngine:
 
         try:
             catalog_name = self.catalog_name
-            self._connection.execute(f"SELECT * FROM {catalog_name}.information_schema.schemata LIMIT 1")
+            quoted_catalog_name = '"' + catalog_name.replace('"', '""') + '"'
+            self._connection.execute(f"SELECT * FROM {quoted_catalog_name}.information_schema.schemata LIMIT 1")
             result["catalog"] = True
         except Exception as e:
             result["error"] = f"Catalog error: {e}"

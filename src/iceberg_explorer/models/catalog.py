@@ -30,7 +30,7 @@ class ListNamespacesResponse(BaseModel):
     namespaces: list[list[str]] = Field(
         default_factory=list,
         description="List of namespace identifiers (each is a list of strings)",
-        examples=[[[["accounting"], ["engineering"]]]],
+        examples=[[["accounting"], ["engineering"]]],
     )
     next_page_token: str | None = Field(
         default=None,

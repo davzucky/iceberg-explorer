@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from unittest.mock import MagicMock, patch
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pyarrow as pa
 import pytest
@@ -601,7 +601,7 @@ class TestGetResultsEndpoint:
         state: QueryState = QueryState.COMPLETED,
         rows: list[list] | None = None,
         columns: list[str] | None = None,
-    ) -> tuple[MagicMock, uuid4]:
+    ) -> tuple[MagicMock, UUID]:
         """Create a mock QueryResult with Arrow batches."""
         query_id = uuid4()
 

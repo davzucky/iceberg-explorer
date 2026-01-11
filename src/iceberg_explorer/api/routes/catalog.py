@@ -198,10 +198,10 @@ async def list_tables(
                 detail=f"Namespace not found: {'.'.join(namespace_parts)}",
             ) from e
 
-        sql = f"SELECT table_name FROM {namespace_path}.information_schema.tables WHERE table_schema = '{namespace_parts[-1]}'"
+        sql = f"SELECT table_name FROM {namespace_path}.information_schema.tables WHERE table_schema = ?"
 
         try:
-            result = conn.execute(sql).fetchall()
+            result = conn.execute(sql, [namespace_parts[-1]]).fetchall()
         except Exception as e:
             if "does not exist" in str(e).lower() or "not found" in str(e).lower():
                 raise HTTPException(
@@ -241,6 +241,9 @@ def _parse_table_path(table_path: str) -> tuple[list[str], str]:
     last_dot = table_path.rfind(".")
     namespace_str = table_path[:last_dot]
     table_name = table_path[last_dot + 1 :]
+
+    if not table_name or "/" in table_name or "/" in namespace_str:
+        raise ValueError(f"Invalid table path: {table_path}")
 
     namespace_parts = _parse_namespace(namespace_str)
     if not namespace_parts:
@@ -298,18 +301,19 @@ async def get_table_schema(
                 ordinal_position,
                 is_nullable
             FROM {namespace_path}.information_schema.columns
-            WHERE table_name = '{table_name}'
+            WHERE table_name = ?
             ORDER BY ordinal_position
         """
-        column_result = conn.execute(columns_sql).fetchall()
+        column_result = conn.execute(columns_sql, [table_name]).fetchall()
 
         partition_columns: set[str] = set()
         unquoted_path = f"{catalog_name}.{'.'.join(namespace_parts)}.{table_name}"
         try:
-            metadata_sql = f"SELECT * FROM iceberg_metadata('{unquoted_path}') LIMIT 100"
-            metadata_result = conn.execute(metadata_sql).fetchall()
+            metadata_sql = "SELECT * FROM iceberg_metadata(?) LIMIT 100"
+            cur = conn.execute(metadata_sql, [unquoted_path])
+            metadata_result = cur.fetchall()
             if metadata_result:
-                description = conn.execute(metadata_sql).description
+                description = cur.description
                 if description:
                     col_names = [col[0].lower() for col in description]
                     if "partition_value" in col_names or "partition" in col_names:
@@ -398,7 +402,8 @@ async def get_table_details(
         try:
             unquoted_path = f"{catalog_name}.{'.'.join(namespace_parts)}.{table_name}"
             snapshot_result = conn.execute(
-                f"SELECT sequence_number, snapshot_id, timestamp_ms, manifest_list FROM iceberg_snapshots('{unquoted_path}')"
+                "SELECT sequence_number, snapshot_id, timestamp_ms, manifest_list FROM iceberg_snapshots(?)",
+                [unquoted_path],
             ).fetchall()
 
             for row in snapshot_result:
@@ -432,7 +437,8 @@ async def get_table_details(
 
         try:
             metadata_result = conn.execute(
-                f"SELECT * FROM iceberg_metadata('{unquoted_path}') LIMIT 1"
+                "SELECT * FROM iceberg_metadata(?) LIMIT 1",
+                [unquoted_path],
             ).fetchone()
             if metadata_result:
                 manifest_path = metadata_result[0]

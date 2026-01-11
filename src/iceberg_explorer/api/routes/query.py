@@ -9,6 +9,7 @@ Provides endpoints for:
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncGenerator
 from uuid import UUID
@@ -119,8 +120,6 @@ async def _stream_results(
         return
 
     while result.state == QueryState.RUNNING:
-        import asyncio
-
         await asyncio.sleep(0.1)
         result = executor.get_status(result_uuid)
         if result is None:
