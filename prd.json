@@ -88,7 +88,8 @@
           "id": "US-010",
           "title": "Query Results Endpoint (Streaming)",
           "description": "API endpoint to retrieve query results with pagination.\n\n**What to do:**\n- `GET /api/v1/query/{query_id}/results` streams JSON lines\n- Stream format: metadata → data batches → progress → complete\n- Support `page_size` param (100, 250, 500, 1000)\n- Support `offset` param for pagination\n- Include execution metrics in complete message\n\n**Files:**\n- src/iceberg_explorer/api/routes/query.py\n\n**Acceptance criteria:**\n- Integration test verifying streaming behavior\n- `uv run pytest` passes",
-          "dependsOn": ["US-009"]
+          "dependsOn": ["US-009"],
+          "passes": true
         },
         {
           "id": "US-011",

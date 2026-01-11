@@ -88,3 +88,21 @@ class ResultsComplete(BaseModel):
     query_id: str = Field(..., description="Query identifier.")
     rows_returned: int = Field(..., description="Total rows returned.")
     duration_seconds: float = Field(..., description="Query execution duration.")
+
+
+class QueryStatusResponse(BaseModel):
+    """Response for query status check."""
+
+    query_id: str = Field(..., description="Query identifier.")
+    status: str = Field(
+        ...,
+        description="Current query status: pending, running, completed, failed, cancelled.",
+    )
+    rows_processed: int | None = Field(
+        default=None,
+        description="Number of rows processed (available for running/completed queries).",
+    )
+    error_message: str | None = Field(
+        default=None,
+        description="Error message if query failed.",
+    )

@@ -911,3 +911,175 @@ class TestGetResultsEndpoint:
         for line in lines:
             parsed = json.loads(line)
             assert "type" in parsed
+
+
+class TestQueryStatusEndpoint:
+    """Tests for GET /api/v1/query/{query_id}/status endpoint."""
+
+    def test_status_pending_query(self, client: TestClient):
+        """Test status for pending query."""
+        mock_result = MagicMock(spec=QueryResult)
+        query_id = uuid4()
+        mock_result.query_id = query_id
+        mock_result.state = QueryState.PENDING
+        mock_result.error_message = None
+        mock_result.metrics = MagicMock(rows_returned=0)
+
+        mock_executor = MagicMock()
+        mock_executor.get_status.return_value = mock_result
+
+        with patch("iceberg_explorer.api.routes.query.get_executor", return_value=mock_executor):
+            response = client.get(f"/api/v1/query/{query_id}/status")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["query_id"] == str(query_id)
+        assert data["status"] == "pending"
+        assert data["rows_processed"] is None
+        assert data["error_message"] is None
+
+    def test_status_running_query(self, client: TestClient):
+        """Test status for running query with progress info."""
+        mock_result = MagicMock(spec=QueryResult)
+        query_id = uuid4()
+        mock_result.query_id = query_id
+        mock_result.state = QueryState.RUNNING
+        mock_result.error_message = None
+        mock_result.metrics = MagicMock(rows_returned=500)
+
+        mock_executor = MagicMock()
+        mock_executor.get_status.return_value = mock_result
+
+        with patch("iceberg_explorer.api.routes.query.get_executor", return_value=mock_executor):
+            response = client.get(f"/api/v1/query/{query_id}/status")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["query_id"] == str(query_id)
+        assert data["status"] == "running"
+        assert data["rows_processed"] == 500
+        assert data["error_message"] is None
+
+    def test_status_completed_query(self, client: TestClient):
+        """Test status for completed query."""
+        mock_result = MagicMock(spec=QueryResult)
+        query_id = uuid4()
+        mock_result.query_id = query_id
+        mock_result.state = QueryState.COMPLETED
+        mock_result.error_message = None
+        mock_result.metrics = MagicMock(rows_returned=1000)
+
+        mock_executor = MagicMock()
+        mock_executor.get_status.return_value = mock_result
+
+        with patch("iceberg_explorer.api.routes.query.get_executor", return_value=mock_executor):
+            response = client.get(f"/api/v1/query/{query_id}/status")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["query_id"] == str(query_id)
+        assert data["status"] == "completed"
+        assert data["rows_processed"] == 1000
+        assert data["error_message"] is None
+
+    def test_status_failed_query(self, client: TestClient):
+        """Test status for failed query with error message."""
+        mock_result = MagicMock(spec=QueryResult)
+        query_id = uuid4()
+        mock_result.query_id = query_id
+        mock_result.state = QueryState.FAILED
+        mock_result.error_message = "Query timeout exceeded"
+        mock_result.metrics = MagicMock(rows_returned=0)
+
+        mock_executor = MagicMock()
+        mock_executor.get_status.return_value = mock_result
+
+        with patch("iceberg_explorer.api.routes.query.get_executor", return_value=mock_executor):
+            response = client.get(f"/api/v1/query/{query_id}/status")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["query_id"] == str(query_id)
+        assert data["status"] == "failed"
+        assert data["rows_processed"] is None
+        assert data["error_message"] == "Query timeout exceeded"
+
+    def test_status_cancelled_query(self, client: TestClient):
+        """Test status for cancelled query."""
+        mock_result = MagicMock(spec=QueryResult)
+        query_id = uuid4()
+        mock_result.query_id = query_id
+        mock_result.state = QueryState.CANCELLED
+        mock_result.error_message = None
+        mock_result.metrics = MagicMock(rows_returned=0)
+
+        mock_executor = MagicMock()
+        mock_executor.get_status.return_value = mock_result
+
+        with patch("iceberg_explorer.api.routes.query.get_executor", return_value=mock_executor):
+            response = client.get(f"/api/v1/query/{query_id}/status")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["query_id"] == str(query_id)
+        assert data["status"] == "cancelled"
+        assert data["rows_processed"] is None
+        assert data["error_message"] is None
+
+    def test_status_query_not_found(self, client: TestClient):
+        """Test status when query is not found."""
+        mock_executor = MagicMock()
+        mock_executor.get_status.return_value = None
+
+        query_id = uuid4()
+        with patch("iceberg_explorer.api.routes.query.get_executor", return_value=mock_executor):
+            response = client.get(f"/api/v1/query/{query_id}/status")
+
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"].lower()
+
+    def test_status_invalid_query_id(self, client: TestClient):
+        """Test status with invalid query ID format."""
+        response = client.get("/api/v1/query/invalid-uuid/status")
+
+        assert response.status_code == 400
+        assert "invalid" in response.json()["detail"].lower()
+
+    def test_status_model_validation(self):
+        """Test QueryStatusResponse model validation."""
+        from iceberg_explorer.models.query import QueryStatusResponse
+
+        response = QueryStatusResponse(
+            query_id="550e8400-e29b-41d4-a716-446655440000",
+            status="running",
+            rows_processed=100,
+            error_message=None,
+        )
+        assert response.query_id == "550e8400-e29b-41d4-a716-446655440000"
+        assert response.status == "running"
+        assert response.rows_processed == 100
+        assert response.error_message is None
+
+    def test_status_model_with_error(self):
+        """Test QueryStatusResponse model with error message."""
+        from iceberg_explorer.models.query import QueryStatusResponse
+
+        response = QueryStatusResponse(
+            query_id="550e8400-e29b-41d4-a716-446655440000",
+            status="failed",
+            rows_processed=None,
+            error_message="Connection timeout",
+        )
+        assert response.status == "failed"
+        assert response.error_message == "Connection timeout"
+
+    def test_status_model_minimal(self):
+        """Test QueryStatusResponse model with minimal fields."""
+        from iceberg_explorer.models.query import QueryStatusResponse
+
+        response = QueryStatusResponse(
+            query_id="550e8400-e29b-41d4-a716-446655440000",
+            status="pending",
+        )
+        assert response.rows_processed is None
+        assert response.error_message is None

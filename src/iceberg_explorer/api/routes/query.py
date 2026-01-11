@@ -19,6 +19,7 @@ from fastapi.responses import StreamingResponse
 from iceberg_explorer.models.query import (
     ExecuteQueryRequest,
     ExecuteQueryResponse,
+    QueryStatusResponse,
     ResultsBatch,
     ResultsComplete,
     ResultsMetadata,
@@ -246,4 +247,49 @@ async def get_results(
     return StreamingResponse(
         _stream_results(query_id, page_size, offset),
         media_type="application/x-ndjson",
+    )
+
+
+@router.get("/{query_id}/status", response_model=QueryStatusResponse)
+async def get_query_status(query_id: str) -> QueryStatusResponse:
+    """Get the status of a query.
+
+    Returns the current state of the query along with progress information
+    for running queries and error messages for failed queries.
+
+    Args:
+        query_id: Query identifier from execute endpoint.
+
+    Returns:
+        QueryStatusResponse with current state and relevant info.
+
+    Raises:
+        HTTPException: 404 if query not found, 400 if invalid query ID.
+    """
+    try:
+        result_uuid = UUID(query_id)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid query ID format: {query_id}",
+        ) from e
+
+    executor = get_executor()
+    result = executor.get_status(result_uuid)
+
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Query not found: {query_id}",
+        )
+
+    rows_processed: int | None = None
+    if result.state in (QueryState.RUNNING, QueryState.COMPLETED):
+        rows_processed = result.metrics.rows_returned
+
+    return QueryStatusResponse(
+        query_id=query_id,
+        status=result.state.value,
+        rows_processed=rows_processed,
+        error_message=result.error_message,
     )
