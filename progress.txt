@@ -11,6 +11,7 @@
 - Use `validate_sql()` to check SQL before execution; blocks INSERT, UPDATE, DELETE, DROP, CREATE, ALTER, etc.
 - API routes in `api/routes/*.py`, register routers in `main.py` with `app.include_router()`
 - Multi-level namespace paths use unit separator (\x1f / %1F) as delimiter in API
+- FastAPI routes with :path parameter: declare more specific routes (e.g., /tables/{path}/schema) before general ones (e.g., /tables/{path})
 
 ---
 
@@ -167,4 +168,27 @@ Thread: https://ampcode.com/threads/T-019bab13-e9d7-74e3-acc3-93c198a8ed13
   - Use path:path in FastAPI route to capture full path including dots
   - iceberg_metadata() returns manifest_path which can be parsed to extract table location
   - Table path format uses dot separator between namespace and table name, with unit separator for multi-level namespaces
+---
+
+## 2026-01-11 - US-008
+Thread: https://ampcode.com/threads/T-019bab18-1cb1-70e8-84df-c8ca2b2964ce
+- What was implemented:
+  - Created Pydantic models for table schema: SchemaField, ColumnStatistics, TableSchemaResponse
+  - GET /api/v1/catalog/tables/{namespace}.{table}/schema endpoint for viewing table schema
+  - Returns: namespace, name, schema_id, fields with column name, type, field_id, nullable flag
+  - Marks partition columns with is_partition_column indicator
+  - Supports column statistics (null_count, min_value, max_value) if available
+  - Query information_schema.columns for column metadata
+  - Uses iceberg_metadata() to detect partition columns from partition_value
+  - 15 new tests (63 catalog tests total, 150 overall)
+- Files changed:
+  - src/iceberg_explorer/models/catalog.py (updated - added SchemaField, ColumnStatistics, TableSchemaResponse)
+  - src/iceberg_explorer/models/__init__.py (updated - exports for new models)
+  - src/iceberg_explorer/api/routes/catalog.py (updated - added get_table_schema endpoint)
+  - tests/test_catalog.py (updated - added TestSchemaModels, TestTableSchemaEndpoint)
+- **Learnings for future iterations:**
+  - FastAPI routes with :path parameter must have more specific routes declared first (schema endpoint before table details)
+  - Query information_schema.columns for column_name, data_type, ordinal_position, is_nullable
+  - Parse partition columns from iceberg_metadata() partition_value field (format: "col=value, col2=value2")
+  - is_nullable values from information_schema can be "YES", "NO", or None (default to True for None)
 ---

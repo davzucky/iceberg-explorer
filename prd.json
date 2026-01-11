@@ -69,7 +69,8 @@
           "id": "US-008",
           "title": "Table Schema Endpoint",
           "description": "API endpoint to view table schema.\n\n**What to do:**\n- `GET /api/v1/catalog/tables/{namespace}.{table}/schema` returns schema\n- Include column name, type, field ID, nullable flag\n- Mark partition columns with indicator\n- Include column statistics if available (min/max/null count)\n\n**Files:**\n- src/iceberg_explorer/api/routes/catalog.py\n\n**Acceptance criteria:**\n- Integration test with various column types\n- `uv run pytest` passes",
-          "dependsOn": ["US-007"]
+          "dependsOn": ["US-007"],
+          "passes": true
         }
       ]
     },
