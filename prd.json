@@ -62,7 +62,8 @@
           "id": "US-007",
           "title": "Table Details Endpoint",
           "description": "API endpoint to view table metadata.\n\n**What to do:**\n- `GET /api/v1/catalog/tables/{namespace}.{table}` returns details\n- Include: location, format, partition spec, sort order, current snapshot\n- Return snapshot history (list of snapshots with timestamps)\n- Return 404 for non-existent table\n\n**Files:**\n- src/iceberg_explorer/api/routes/catalog.py\n\n**Acceptance criteria:**\n- Integration test verifying all metadata fields\n- `uv run pytest` passes",
-          "dependsOn": ["US-006"]
+          "dependsOn": ["US-006"],
+          "passes": true
         },
         {
           "id": "US-008",

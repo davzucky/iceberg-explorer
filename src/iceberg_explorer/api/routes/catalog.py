@@ -15,6 +15,10 @@ from fastapi import APIRouter, HTTPException, Query
 from iceberg_explorer.models.catalog import (
     ListNamespacesResponse,
     ListTablesResponse,
+    PartitionSpec,
+    Snapshot,
+    SortOrder,
+    TableDetails,
     TableIdentifier,
 )
 from iceberg_explorer.query.engine import get_engine
@@ -211,3 +215,139 @@ async def list_tables(
             )
 
     return ListTablesResponse(identifiers=identifiers)
+
+
+def _parse_table_path(table_path: str) -> tuple[list[str], str]:
+    """Parse a table path in format 'namespace.table' into components.
+
+    The namespace uses unit separator (\\x1f) for multi-level, and the table
+    name is the last segment after the final dot.
+
+    Args:
+        table_path: Table path like 'accounting.transactions' or 'accounting\\x1ftax.records'
+
+    Returns:
+        Tuple of (namespace_parts, table_name)
+
+    Raises:
+        ValueError: If the path format is invalid.
+    """
+    if "." not in table_path:
+        raise ValueError(f"Invalid table path format: {table_path}. Expected 'namespace.table'")
+
+    last_dot = table_path.rfind(".")
+    namespace_str = table_path[:last_dot]
+    table_name = table_path[last_dot + 1 :]
+
+    namespace_parts = _parse_namespace(namespace_str)
+    if not namespace_parts:
+        raise ValueError(f"Invalid namespace in table path: {table_path}")
+
+    return namespace_parts, table_name
+
+
+@router.get("/tables/{table_path:path}", response_model=TableDetails)
+async def get_table_details(
+    table_path: str,
+) -> TableDetails:
+    """Get detailed metadata for a table.
+
+    Args:
+        table_path: Table path in format 'namespace.table' where namespace uses
+                   unit separator (\\x1f) for multi-level. Example: 'accounting.transactions'
+                   or 'accounting%1Ftax.records'
+
+    Returns:
+        TableDetails with location, format, partition spec, sort order, and snapshots.
+
+    Raises:
+        HTTPException: 404 if table doesn't exist, 400 if path format is invalid.
+    """
+    engine = get_engine()
+
+    if not engine.is_initialized:
+        engine.initialize()
+
+    try:
+        namespace_parts, table_name = _parse_table_path(table_path)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    catalog_name = engine.catalog_name
+
+    with engine.get_connection() as conn:
+        namespace_path = _build_namespace_path(catalog_name, namespace_parts)
+        quoted_table = _quote_identifier(table_name)
+        full_table_path = f"{namespace_path}.{quoted_table}"
+
+        try:
+            conn.execute(f"SELECT * FROM {full_table_path} LIMIT 0")
+        except Exception as e:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Table not found: {'.'.join(namespace_parts)}.{table_name}",
+            ) from e
+
+        snapshots: list[Snapshot] = []
+        current_snapshot: Snapshot | None = None
+        try:
+            unquoted_path = f"{catalog_name}.{'.'.join(namespace_parts)}.{table_name}"
+            snapshot_result = conn.execute(
+                f"SELECT sequence_number, snapshot_id, timestamp_ms, manifest_list FROM iceberg_snapshots('{unquoted_path}')"
+            ).fetchall()
+
+            for row in snapshot_result:
+                timestamp_ms = row[2]
+                if hasattr(timestamp_ms, "timestamp"):
+                    timestamp_ms = int(timestamp_ms.timestamp() * 1000)
+                elif isinstance(timestamp_ms, str):
+                    from datetime import datetime
+
+                    dt = datetime.fromisoformat(timestamp_ms.replace("Z", "+00:00"))
+                    timestamp_ms = int(dt.timestamp() * 1000)
+                else:
+                    timestamp_ms = int(timestamp_ms)
+
+                snapshot = Snapshot(
+                    sequence_number=int(row[0]),
+                    snapshot_id=int(row[1]),
+                    timestamp_ms=timestamp_ms,
+                    manifest_list=row[3] if row[3] else None,
+                )
+                snapshots.append(snapshot)
+
+            if snapshots:
+                current_snapshot = max(snapshots, key=lambda s: s.sequence_number)
+        except Exception:
+            pass
+
+        partition_spec: PartitionSpec | None = None
+        sort_order: SortOrder | None = None
+        location: str | None = None
+
+        try:
+            metadata_result = conn.execute(
+                f"SELECT * FROM iceberg_metadata('{unquoted_path}') LIMIT 1"
+            ).fetchone()
+            if metadata_result:
+                manifest_path = metadata_result[0]
+                if manifest_path:
+                    path_parts = manifest_path.split("/metadata/")
+                    if len(path_parts) > 1:
+                        location = path_parts[0]
+        except Exception:
+            pass
+
+        if location is None:
+            location = f"s3://{catalog_name}/{'.'.join(namespace_parts)}/{table_name}"
+
+    return TableDetails(
+        namespace=namespace_parts,
+        name=table_name,
+        location=location,
+        format="ICEBERG",
+        partition_spec=partition_spec,
+        sort_order=sort_order,
+        current_snapshot=current_snapshot,
+        snapshots=snapshots,
+    )

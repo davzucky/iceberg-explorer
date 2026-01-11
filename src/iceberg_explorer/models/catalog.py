@@ -64,3 +64,129 @@ class ListTablesResponse(BaseModel):
         default=None,
         description="Token for fetching the next page of results",
     )
+
+
+class Snapshot(BaseModel):
+    """Represents an Iceberg table snapshot."""
+
+    sequence_number: int = Field(
+        ...,
+        description="Sequence number of the snapshot",
+    )
+    snapshot_id: int = Field(
+        ...,
+        description="Unique identifier for the snapshot",
+    )
+    timestamp_ms: int = Field(
+        ...,
+        description="Timestamp when snapshot was created (milliseconds since epoch)",
+    )
+    manifest_list: str | None = Field(
+        default=None,
+        description="Path to the manifest list for this snapshot",
+    )
+
+
+class PartitionField(BaseModel):
+    """Represents a field in the partition spec."""
+
+    source_id: int = Field(
+        ...,
+        description="ID of the source column",
+    )
+    field_id: int = Field(
+        ...,
+        description="ID of the partition field",
+    )
+    name: str = Field(
+        ...,
+        description="Name of the partition field",
+    )
+    transform: str = Field(
+        ...,
+        description="Transform applied to the source column (e.g., identity, bucket, truncate)",
+    )
+
+
+class PartitionSpec(BaseModel):
+    """Represents the partition specification for an Iceberg table."""
+
+    spec_id: int = Field(
+        ...,
+        description="ID of the partition spec",
+    )
+    fields: list[PartitionField] = Field(
+        default_factory=list,
+        description="List of partition fields",
+    )
+
+
+class SortField(BaseModel):
+    """Represents a field in the sort order."""
+
+    source_id: int = Field(
+        ...,
+        description="ID of the source column",
+    )
+    transform: str = Field(
+        ...,
+        description="Transform applied to the source column",
+    )
+    direction: str = Field(
+        ...,
+        description="Sort direction (asc or desc)",
+    )
+    null_order: str = Field(
+        ...,
+        description="Null ordering (nulls_first or nulls_last)",
+    )
+
+
+class SortOrder(BaseModel):
+    """Represents the sort order for an Iceberg table."""
+
+    order_id: int = Field(
+        ...,
+        description="ID of the sort order",
+    )
+    fields: list[SortField] = Field(
+        default_factory=list,
+        description="List of sort fields",
+    )
+
+
+class TableDetails(BaseModel):
+    """Detailed metadata for an Iceberg table."""
+
+    namespace: list[str] = Field(
+        ...,
+        description="Namespace path components",
+    )
+    name: str = Field(
+        ...,
+        description="Table name",
+    )
+    location: str | None = Field(
+        default=None,
+        description="Storage location of the table",
+    )
+    format: str = Field(
+        default="ICEBERG",
+        description="Table format (always ICEBERG)",
+    )
+    partition_spec: PartitionSpec | None = Field(
+        default=None,
+        description="Current partition specification",
+    )
+    sort_order: SortOrder | None = Field(
+        default=None,
+        description="Current sort order",
+    )
+    current_snapshot: Snapshot | None = Field(
+        default=None,
+        description="Current (latest) snapshot",
+    )
+    snapshots: list[Snapshot] = Field(
+        default_factory=list,
+        description="List of all snapshots (history)",
+    )

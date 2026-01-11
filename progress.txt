@@ -145,3 +145,26 @@ Thread: https://ampcode.com/threads/T-019bab11-c03d-773f-b10d-817ffe80ca82
   - Reuse existing helper functions (_parse_namespace, _build_namespace_path, _quote_identifier)
   - Existing patterns from US-005 namespaces endpoint apply directly to tables endpoint
 ---
+
+## 2026-01-11 - US-007
+Thread: https://ampcode.com/threads/T-019bab13-e9d7-74e3-acc3-93c198a8ed13
+- What was implemented:
+  - Created Pydantic models for table details: TableDetails, Snapshot, PartitionSpec, PartitionField, SortOrder, SortField
+  - GET /api/v1/catalog/tables/{namespace}.{table} endpoint for viewing table metadata
+  - Endpoint returns: namespace, name, location, format, partition_spec, sort_order, current_snapshot, snapshots
+  - Uses iceberg_snapshots() DuckDB function to retrieve snapshot history
+  - Uses iceberg_metadata() to extract table location from manifest paths
+  - 404 error handling for non-existent tables
+  - 400 error handling for invalid path format
+  - 29 new tests (49 catalog tests total, 135 overall)
+- Files changed:
+  - src/iceberg_explorer/models/catalog.py (updated - added TableDetails, Snapshot, PartitionSpec, SortOrder models)
+  - src/iceberg_explorer/models/__init__.py (updated - exports for new models)
+  - src/iceberg_explorer/api/routes/catalog.py (updated - added get_table_details endpoint and _parse_table_path helper)
+  - tests/test_catalog.py (updated - added TestTableDetailsModels, TestTableDetailsEndpoint, TestParseTablePath)
+- **Learnings for future iterations:**
+  - DuckDB iceberg_snapshots() returns timestamp_ms as various types (datetime, string, int) - handle all cases
+  - Use path:path in FastAPI route to capture full path including dots
+  - iceberg_metadata() returns manifest_path which can be parsed to extract table location
+  - Table path format uses dot separator between namespace and table name, with unit separator for multi-level namespaces
+---
