@@ -17,7 +17,8 @@
           "id": "US-002",
           "title": "Configuration System",
           "description": "Implement flexible configuration system for different environments.\n\n**What to do:**\n- Load config from JSON file via `ICEBERG_EXPLORER_CONFIG` env var\n- Support env var overrides (e.g., `ICEBERG_EXPLORER_QUERY__MAX_ROWS`)\n- Create Pydantic models for config validation\n- Support both REST and local catalog types\n- Add configuration for DuckDB memory/threads limits\n\n**Files:**\n- src/iceberg_explorer/config.py\n\n**Acceptance criteria:**\n- Defaults for all optional settings\n- Tests cover config loading and validation\n- `uv run pytest` passes",
-          "dependsOn": ["US-001"]
+          "dependsOn": ["US-001"],
+          "passes": true
         }
       ]
     },
