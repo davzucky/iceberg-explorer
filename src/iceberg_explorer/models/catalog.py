@@ -190,3 +190,70 @@ class TableDetails(BaseModel):
         default_factory=list,
         description="List of all snapshots (history)",
     )
+
+
+class ColumnStatistics(BaseModel):
+    """Column-level statistics from Iceberg table metadata."""
+
+    null_count: int | None = Field(
+        default=None,
+        description="Number of null values in the column",
+    )
+    min_value: str | None = Field(
+        default=None,
+        description="Minimum value (as string representation)",
+    )
+    max_value: str | None = Field(
+        default=None,
+        description="Maximum value (as string representation)",
+    )
+
+
+class SchemaField(BaseModel):
+    """Represents a column in an Iceberg table schema."""
+
+    field_id: int = Field(
+        ...,
+        description="Unique field identifier in the schema",
+    )
+    name: str = Field(
+        ...,
+        description="Column name",
+    )
+    type: str = Field(
+        ...,
+        description="Column data type",
+    )
+    nullable: bool = Field(
+        default=True,
+        description="Whether the column allows null values",
+    )
+    is_partition_column: bool = Field(
+        default=False,
+        description="Whether this column is used for partitioning",
+    )
+    statistics: ColumnStatistics | None = Field(
+        default=None,
+        description="Column statistics if available",
+    )
+
+
+class TableSchemaResponse(BaseModel):
+    """Response for table schema endpoint."""
+
+    namespace: list[str] = Field(
+        ...,
+        description="Namespace path components",
+    )
+    name: str = Field(
+        ...,
+        description="Table name",
+    )
+    schema_id: int = Field(
+        default=0,
+        description="ID of the current schema",
+    )
+    fields: list[SchemaField] = Field(
+        default_factory=list,
+        description="List of columns in the schema",
+    )

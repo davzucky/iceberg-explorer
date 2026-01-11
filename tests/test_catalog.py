@@ -819,3 +819,375 @@ class TestParseTablePath:
 
         with pytest.raises(ValueError, match="Invalid namespace"):
             _parse_table_path(".table")
+
+
+class TestSchemaModels:
+    """Tests for schema-related Pydantic models."""
+
+    def test_column_statistics_model(self):
+        """Test ColumnStatistics model with all fields."""
+        from iceberg_explorer.models.catalog import ColumnStatistics
+
+        stats = ColumnStatistics(
+            null_count=100,
+            min_value="0",
+            max_value="999",
+        )
+        assert stats.null_count == 100
+        assert stats.min_value == "0"
+        assert stats.max_value == "999"
+
+    def test_column_statistics_defaults(self):
+        """Test ColumnStatistics with default values."""
+        from iceberg_explorer.models.catalog import ColumnStatistics
+
+        stats = ColumnStatistics()
+        assert stats.null_count is None
+        assert stats.min_value is None
+        assert stats.max_value is None
+
+    def test_schema_field_model(self):
+        """Test SchemaField model with all fields."""
+        from iceberg_explorer.models.catalog import ColumnStatistics, SchemaField
+
+        stats = ColumnStatistics(null_count=5)
+        field = SchemaField(
+            field_id=1,
+            name="user_id",
+            type="BIGINT",
+            nullable=False,
+            is_partition_column=True,
+            statistics=stats,
+        )
+        assert field.field_id == 1
+        assert field.name == "user_id"
+        assert field.type == "BIGINT"
+        assert field.nullable is False
+        assert field.is_partition_column is True
+        assert field.statistics.null_count == 5
+
+    def test_schema_field_defaults(self):
+        """Test SchemaField with default values."""
+        from iceberg_explorer.models.catalog import SchemaField
+
+        field = SchemaField(
+            field_id=1,
+            name="value",
+            type="VARCHAR",
+        )
+        assert field.nullable is True
+        assert field.is_partition_column is False
+        assert field.statistics is None
+
+    def test_table_schema_response_model(self):
+        """Test TableSchemaResponse model."""
+        from iceberg_explorer.models.catalog import SchemaField, TableSchemaResponse
+
+        fields = [
+            SchemaField(field_id=1, name="id", type="INTEGER"),
+            SchemaField(field_id=2, name="name", type="VARCHAR"),
+        ]
+        response = TableSchemaResponse(
+            namespace=["accounting"],
+            name="users",
+            schema_id=1,
+            fields=fields,
+        )
+        assert response.namespace == ["accounting"]
+        assert response.name == "users"
+        assert response.schema_id == 1
+        assert len(response.fields) == 2
+
+    def test_table_schema_response_defaults(self):
+        """Test TableSchemaResponse with defaults."""
+        from iceberg_explorer.models.catalog import TableSchemaResponse
+
+        response = TableSchemaResponse(
+            namespace=["test"],
+            name="empty_table",
+        )
+        assert response.schema_id == 0
+        assert response.fields == []
+
+
+class TestTableSchemaEndpoint:
+    """Tests for GET /api/v1/catalog/tables/{table_path}/schema endpoint."""
+
+    def test_get_table_schema_basic(self, client: TestClient, mock_engine: MagicMock):
+        """Test getting table schema returns correct structure."""
+        mock_conn = MagicMock()
+
+        def mock_execute(sql):
+            result = MagicMock()
+            if "LIMIT 0" in sql:
+                result.fetchone.return_value = None
+            elif "information_schema.columns" in sql:
+                result.fetchall.return_value = [
+                    ("id", "INTEGER", 1, "NO"),
+                    ("name", "VARCHAR", 2, "YES"),
+                    ("created_at", "TIMESTAMP", 3, "YES"),
+                ]
+            elif "iceberg_metadata" in sql:
+                result.fetchall.return_value = []
+                result.description = []
+            else:
+                result.fetchall.return_value = []
+            return result
+
+        mock_conn.execute.side_effect = mock_execute
+        mock_engine.get_connection.return_value.__enter__.return_value = mock_conn
+        mock_engine.get_connection.return_value.__exit__.return_value = None
+
+        with patch("iceberg_explorer.api.routes.catalog.get_engine", return_value=mock_engine):
+            response = client.get("/api/v1/catalog/tables/accounting.transactions/schema")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["namespace"] == ["accounting"]
+        assert data["name"] == "transactions"
+        assert "fields" in data
+        assert len(data["fields"]) == 3
+        assert data["fields"][0]["name"] == "id"
+        assert data["fields"][0]["type"] == "INTEGER"
+        assert data["fields"][0]["nullable"] is False
+
+    def test_get_table_schema_with_various_types(self, client: TestClient, mock_engine: MagicMock):
+        """Test schema with various column types."""
+        mock_conn = MagicMock()
+
+        def mock_execute(sql):
+            result = MagicMock()
+            if "LIMIT 0" in sql:
+                result.fetchone.return_value = None
+            elif "information_schema.columns" in sql:
+                result.fetchall.return_value = [
+                    ("int_col", "INTEGER", 1, "YES"),
+                    ("bigint_col", "BIGINT", 2, "YES"),
+                    ("double_col", "DOUBLE", 3, "YES"),
+                    ("string_col", "VARCHAR", 4, "YES"),
+                    ("bool_col", "BOOLEAN", 5, "YES"),
+                    ("date_col", "DATE", 6, "YES"),
+                    ("ts_col", "TIMESTAMP", 7, "YES"),
+                    ("decimal_col", "DECIMAL(10,2)", 8, "YES"),
+                    ("binary_col", "BLOB", 9, "YES"),
+                    ("list_col", "INTEGER[]", 10, "YES"),
+                ]
+            elif "iceberg_metadata" in sql:
+                result.fetchall.return_value = []
+                result.description = []
+            else:
+                result.fetchall.return_value = []
+            return result
+
+        mock_conn.execute.side_effect = mock_execute
+        mock_engine.get_connection.return_value.__enter__.return_value = mock_conn
+        mock_engine.get_connection.return_value.__exit__.return_value = None
+
+        with patch("iceberg_explorer.api.routes.catalog.get_engine", return_value=mock_engine):
+            response = client.get("/api/v1/catalog/tables/ns.types_table/schema")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["fields"]) == 10
+
+        type_map = {f["name"]: f["type"] for f in data["fields"]}
+        assert type_map["int_col"] == "INTEGER"
+        assert type_map["bigint_col"] == "BIGINT"
+        assert type_map["double_col"] == "DOUBLE"
+        assert type_map["string_col"] == "VARCHAR"
+        assert type_map["bool_col"] == "BOOLEAN"
+        assert type_map["date_col"] == "DATE"
+        assert type_map["ts_col"] == "TIMESTAMP"
+        assert type_map["decimal_col"] == "DECIMAL(10,2)"
+        assert type_map["binary_col"] == "BLOB"
+        assert type_map["list_col"] == "INTEGER[]"
+
+    def test_get_table_schema_partition_columns(self, client: TestClient, mock_engine: MagicMock):
+        """Test schema marks partition columns."""
+        mock_conn = MagicMock()
+
+        def mock_execute(sql):
+            result = MagicMock()
+            if "LIMIT 0" in sql:
+                result.fetchone.return_value = None
+            elif "information_schema.columns" in sql:
+                result.fetchall.return_value = [
+                    ("id", "INTEGER", 1, "NO"),
+                    ("event_date", "DATE", 2, "YES"),
+                    ("region", "VARCHAR", 3, "YES"),
+                ]
+            elif "iceberg_metadata" in sql:
+                result.fetchall.return_value = [
+                    ("path/file1.parquet", 1, "DATA", "ADDED", "EXISTING", "data/file.parquet", "PARQUET", 100, "event_date=2024-01-01, region=us-east"),
+                ]
+                result.description = [
+                    ("manifest_path",), ("manifest_sequence_number",), ("manifest_content",),
+                    ("status",), ("content",), ("file_path",), ("file_format",), ("record_count",), ("partition_value",),
+                ]
+            else:
+                result.fetchall.return_value = []
+            return result
+
+        mock_conn.execute.side_effect = mock_execute
+        mock_engine.get_connection.return_value.__enter__.return_value = mock_conn
+        mock_engine.get_connection.return_value.__exit__.return_value = None
+
+        with patch("iceberg_explorer.api.routes.catalog.get_engine", return_value=mock_engine):
+            response = client.get("/api/v1/catalog/tables/ns.partitioned_table/schema")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        partition_map = {f["name"]: f["is_partition_column"] for f in data["fields"]}
+        assert partition_map["id"] is False
+        assert partition_map["event_date"] is True
+        assert partition_map["region"] is True
+
+    def test_get_table_schema_nested_namespace(self, client: TestClient, mock_engine: MagicMock):
+        """Test schema for table with nested namespace."""
+        mock_conn = MagicMock()
+
+        def mock_execute(sql):
+            result = MagicMock()
+            if "LIMIT 0" in sql:
+                result.fetchone.return_value = None
+            elif "information_schema.columns" in sql:
+                result.fetchall.return_value = [
+                    ("col1", "VARCHAR", 1, "YES"),
+                ]
+            elif "iceberg_metadata" in sql:
+                result.fetchall.return_value = []
+                result.description = []
+            else:
+                result.fetchall.return_value = []
+            return result
+
+        mock_conn.execute.side_effect = mock_execute
+        mock_engine.get_connection.return_value.__enter__.return_value = mock_conn
+        mock_engine.get_connection.return_value.__exit__.return_value = None
+
+        with patch("iceberg_explorer.api.routes.catalog.get_engine", return_value=mock_engine):
+            response = client.get("/api/v1/catalog/tables/accounting%1Ftax.records/schema")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["namespace"] == ["accounting", "tax"]
+        assert data["name"] == "records"
+
+    def test_get_table_schema_table_not_found(self, client: TestClient, mock_engine: MagicMock):
+        """Test 404 when table doesn't exist."""
+        mock_conn = MagicMock()
+        mock_conn.execute.side_effect = Exception("Table does not exist")
+        mock_engine.get_connection.return_value.__enter__.return_value = mock_conn
+        mock_engine.get_connection.return_value.__exit__.return_value = None
+
+        with patch("iceberg_explorer.api.routes.catalog.get_engine", return_value=mock_engine):
+            response = client.get("/api/v1/catalog/tables/nonexistent.table/schema")
+
+        assert response.status_code == 404
+        data = response.json()
+        assert "not found" in data["detail"].lower() or "Table" in data["detail"]
+
+    def test_get_table_schema_invalid_path(self, client: TestClient, mock_engine: MagicMock):
+        """Test 400 when path format is invalid."""
+        mock_engine.get_connection.return_value.__enter__.return_value = MagicMock()
+        mock_engine.get_connection.return_value.__exit__.return_value = None
+
+        with patch("iceberg_explorer.api.routes.catalog.get_engine", return_value=mock_engine):
+            response = client.get("/api/v1/catalog/tables/invalidpath/schema")
+
+        assert response.status_code == 400
+        data = response.json()
+        assert "Invalid" in data["detail"]
+
+    def test_get_table_schema_engine_initialization(self, client: TestClient, mock_engine: MagicMock):
+        """Test engine is initialized if not already."""
+        mock_engine.is_initialized = False
+        mock_conn = MagicMock()
+
+        def mock_execute(sql):
+            result = MagicMock()
+            if "LIMIT 0" in sql:
+                result.fetchone.return_value = None
+            elif "information_schema.columns" in sql:
+                result.fetchall.return_value = [("col1", "VARCHAR", 1, "YES")]
+            elif "iceberg_metadata" in sql:
+                result.fetchall.return_value = []
+                result.description = []
+            else:
+                result.fetchall.return_value = []
+            return result
+
+        mock_conn.execute.side_effect = mock_execute
+        mock_engine.get_connection.return_value.__enter__.return_value = mock_conn
+        mock_engine.get_connection.return_value.__exit__.return_value = None
+
+        with patch("iceberg_explorer.api.routes.catalog.get_engine", return_value=mock_engine):
+            response = client.get("/api/v1/catalog/tables/ns.table/schema")
+
+        assert response.status_code == 200
+        mock_engine.initialize.assert_called_once()
+
+    def test_get_table_schema_empty_table(self, client: TestClient, mock_engine: MagicMock):
+        """Test schema for table with no columns (edge case)."""
+        mock_conn = MagicMock()
+
+        def mock_execute(sql):
+            result = MagicMock()
+            if "LIMIT 0" in sql:
+                result.fetchone.return_value = None
+            elif "information_schema.columns" in sql:
+                result.fetchall.return_value = []
+            elif "iceberg_metadata" in sql:
+                result.fetchall.return_value = []
+                result.description = []
+            else:
+                result.fetchall.return_value = []
+            return result
+
+        mock_conn.execute.side_effect = mock_execute
+        mock_engine.get_connection.return_value.__enter__.return_value = mock_conn
+        mock_engine.get_connection.return_value.__exit__.return_value = None
+
+        with patch("iceberg_explorer.api.routes.catalog.get_engine", return_value=mock_engine):
+            response = client.get("/api/v1/catalog/tables/ns.empty_table/schema")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["fields"] == []
+
+    def test_get_table_schema_nullable_field_types(self, client: TestClient, mock_engine: MagicMock):
+        """Test nullable field detection for various is_nullable values."""
+        mock_conn = MagicMock()
+
+        def mock_execute(sql):
+            result = MagicMock()
+            if "LIMIT 0" in sql:
+                result.fetchone.return_value = None
+            elif "information_schema.columns" in sql:
+                result.fetchall.return_value = [
+                    ("nullable_yes", "VARCHAR", 1, "YES"),
+                    ("nullable_no", "INTEGER", 2, "NO"),
+                    ("nullable_null", "DOUBLE", 3, None),
+                ]
+            elif "iceberg_metadata" in sql:
+                result.fetchall.return_value = []
+                result.description = []
+            else:
+                result.fetchall.return_value = []
+            return result
+
+        mock_conn.execute.side_effect = mock_execute
+        mock_engine.get_connection.return_value.__enter__.return_value = mock_conn
+        mock_engine.get_connection.return_value.__exit__.return_value = None
+
+        with patch("iceberg_explorer.api.routes.catalog.get_engine", return_value=mock_engine):
+            response = client.get("/api/v1/catalog/tables/ns.table/schema")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        nullable_map = {f["name"]: f["nullable"] for f in data["fields"]}
+        assert nullable_map["nullable_yes"] is True
+        assert nullable_map["nullable_no"] is False
+        assert nullable_map["nullable_null"] is True

@@ -13,13 +13,16 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Query
 
 from iceberg_explorer.models.catalog import (
+    ColumnStatistics,
     ListNamespacesResponse,
     ListTablesResponse,
     PartitionSpec,
+    SchemaField,
     Snapshot,
     SortOrder,
     TableDetails,
     TableIdentifier,
+    TableSchemaResponse,
 )
 from iceberg_explorer.query.engine import get_engine
 
@@ -244,6 +247,108 @@ def _parse_table_path(table_path: str) -> tuple[list[str], str]:
         raise ValueError(f"Invalid namespace in table path: {table_path}")
 
     return namespace_parts, table_name
+
+
+@router.get("/tables/{table_path:path}/schema", response_model=TableSchemaResponse)
+async def get_table_schema(
+    table_path: str,
+) -> TableSchemaResponse:
+    """Get schema for a table.
+
+    Args:
+        table_path: Table path in format 'namespace.table' where namespace uses
+                   unit separator (\\x1f) for multi-level. Example: 'accounting.transactions'
+                   or 'accounting%1Ftax.records'
+
+    Returns:
+        TableSchemaResponse with column definitions, types, and partition indicators.
+
+    Raises:
+        HTTPException: 404 if table doesn't exist, 400 if path format is invalid.
+    """
+    engine = get_engine()
+
+    if not engine.is_initialized:
+        engine.initialize()
+
+    try:
+        namespace_parts, table_name = _parse_table_path(table_path)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    catalog_name = engine.catalog_name
+
+    with engine.get_connection() as conn:
+        namespace_path = _build_namespace_path(catalog_name, namespace_parts)
+        quoted_table = _quote_identifier(table_name)
+        full_table_path = f"{namespace_path}.{quoted_table}"
+
+        try:
+            conn.execute(f"SELECT * FROM {full_table_path} LIMIT 0")
+        except Exception as e:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Table not found: {'.'.join(namespace_parts)}.{table_name}",
+            ) from e
+
+        columns_sql = f"""
+            SELECT
+                column_name,
+                data_type,
+                ordinal_position,
+                is_nullable
+            FROM {namespace_path}.information_schema.columns
+            WHERE table_name = '{table_name}'
+            ORDER BY ordinal_position
+        """
+        column_result = conn.execute(columns_sql).fetchall()
+
+        partition_columns: set[str] = set()
+        unquoted_path = f"{catalog_name}.{'.'.join(namespace_parts)}.{table_name}"
+        try:
+            metadata_sql = f"SELECT * FROM iceberg_metadata('{unquoted_path}') LIMIT 100"
+            metadata_result = conn.execute(metadata_sql).fetchall()
+            if metadata_result:
+                description = conn.execute(metadata_sql).description
+                if description:
+                    col_names = [col[0].lower() for col in description]
+                    if "partition_value" in col_names or "partition" in col_names:
+                        part_idx = col_names.index("partition_value") if "partition_value" in col_names else col_names.index("partition")
+                        for row in metadata_result:
+                            if row[part_idx]:
+                                for part in str(row[part_idx]).split(","):
+                                    if "=" in part:
+                                        partition_columns.add(part.split("=")[0].strip())
+        except Exception:
+            pass
+
+        column_stats: dict[str, ColumnStatistics] = {}
+
+        fields: list[SchemaField] = []
+        for i, row in enumerate(column_result):
+            col_name = row[0]
+            col_type = row[1]
+            ordinal = row[2] if len(row) > 2 else i + 1
+            is_nullable = row[3].upper() == "YES" if len(row) > 3 and row[3] else True
+
+            stats = column_stats.get(col_name)
+
+            field = SchemaField(
+                field_id=ordinal,
+                name=col_name,
+                type=col_type,
+                nullable=is_nullable,
+                is_partition_column=col_name in partition_columns,
+                statistics=stats,
+            )
+            fields.append(field)
+
+    return TableSchemaResponse(
+        namespace=namespace_parts,
+        name=table_name,
+        schema_id=0,
+        fields=fields,
+    )
 
 
 @router.get("/tables/{table_path:path}", response_model=TableDetails)
