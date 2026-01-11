@@ -102,7 +102,8 @@
           "id": "US-012",
           "title": "Cancel Query Endpoint",
           "description": "API endpoint to cancel running queries.\n\n**What to do:**\n- `POST /api/v1/query/{query_id}/cancel` stops execution\n- DuckDB query interrupted cleanly\n- Status updates to \"cancelled\"\n- Return success even if query already finished\n\n**Files:**\n- src/iceberg_explorer/api/routes/query.py\n\n**Acceptance criteria:**\n- Integration test verifying cancellation works\n- `uv run pytest` passes",
-          "dependsOn": ["US-011"]
+          "dependsOn": ["US-011"],
+          "passes": true
         }
       ]
     },

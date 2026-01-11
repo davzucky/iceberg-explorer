@@ -241,3 +241,25 @@ Thread: https://ampcode.com/threads/T-019bab35-8212-73d9-82f1-718c11808f99
   - QueryState enum values match expected API status strings (pending, running, etc.)
   - Follow existing pattern: 400 for invalid input format, 404 for not found
 ---
+
+## 2026-01-11 - US-012
+Thread: https://ampcode.com/threads/T-019bab38-4b01-775c-9ef2-d8393f1a4abb
+- What was implemented:
+  - Created CancelQueryResponse Pydantic model with query_id, cancelled, status fields
+  - POST /api/v1/query/{query_id}/cancel endpoint for cancelling queries
+  - Calls executor.cancel() to interrupt DuckDB query cleanly
+  - Returns success (200) even if query already finished (completed, failed, cancelled)
+  - Returns cancelled=true if query was actively cancelled, false if already terminal
+  - 404 for non-existent queries, 400 for invalid query ID format
+  - 11 new tests (81 query API tests total, 231 overall)
+- Files changed:
+  - src/iceberg_explorer/models/query.py (updated - added CancelQueryResponse)
+  - src/iceberg_explorer/models/__init__.py (updated - exports)
+  - src/iceberg_explorer/api/routes/query.py (updated - added cancel_query endpoint)
+  - tests/test_query_api.py (updated - added TestCancelQueryEndpoint)
+- **Learnings for future iterations:**
+  - Reuse existing executor.cancel() method which already handles threading.Event cancellation
+  - Follow existing pattern: 400 for invalid input format, 404 for not found
+  - executor.cancel() returns False for terminal queries (completed/failed/cancelled)
+  - Query status and cancel endpoint patterns are identical for error handling
+---
