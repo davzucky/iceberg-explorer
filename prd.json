@@ -81,7 +81,8 @@
           "id": "US-009",
           "title": "Execute Query Endpoint",
           "description": "API endpoint to execute SQL queries.\n\n**What to do:**\n- `POST /api/v1/query/execute` accepts SQL and optional timeout\n- Return query_id for tracking\n- Validate SQL is SELECT-only before execution\n- Default timeout 300s, user can specify 10s-3600s\n- Return error with message for invalid queries\n\n**Files:**\n- src/iceberg_explorer/api/routes/query.py\n- src/iceberg_explorer/models/query.py\n\n**Acceptance criteria:**\n- Unit tests for SQL validation\n- Integration tests for execution\n- `uv run pytest` passes",
-          "dependsOn": ["US-004"]
+          "dependsOn": ["US-004"],
+          "passes": true
         },
         {
           "id": "US-010",
