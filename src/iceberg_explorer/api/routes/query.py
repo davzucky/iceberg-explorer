@@ -17,6 +17,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from iceberg_explorer.models.query import (
+    CancelQueryResponse,
     ExecuteQueryRequest,
     ExecuteQueryResponse,
     QueryStatusResponse,
@@ -292,4 +293,49 @@ async def get_query_status(query_id: str) -> QueryStatusResponse:
         status=result.state.value,
         rows_processed=rows_processed,
         error_message=result.error_message,
+    )
+
+
+@router.post("/{query_id}/cancel", response_model=CancelQueryResponse)
+async def cancel_query(query_id: str) -> CancelQueryResponse:
+    """Cancel a running query.
+
+    Attempts to cancel the specified query. Returns success even if
+    the query has already finished (completed, failed, or cancelled).
+
+    Args:
+        query_id: Query identifier from execute endpoint.
+
+    Returns:
+        CancelQueryResponse with cancellation result.
+
+    Raises:
+        HTTPException: 404 if query not found, 400 if invalid query ID.
+    """
+    try:
+        result_uuid = UUID(query_id)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid query ID format: {query_id}",
+        ) from e
+
+    executor = get_executor()
+
+    result = executor.get_status(result_uuid)
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Query not found: {query_id}",
+        )
+
+    was_cancelled = executor.cancel(result_uuid)
+
+    result = executor.get_status(result_uuid)
+    current_status = result.state.value if result else "unknown"
+
+    return CancelQueryResponse(
+        query_id=query_id,
+        cancelled=was_cancelled,
+        status=current_status,
     )

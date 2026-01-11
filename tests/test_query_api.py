@@ -1083,3 +1083,179 @@ class TestQueryStatusEndpoint:
         )
         assert response.rows_processed is None
         assert response.error_message is None
+
+
+class TestCancelQueryEndpoint:
+    """Tests for POST /api/v1/query/{query_id}/cancel endpoint."""
+
+    def test_cancel_running_query(self, client: TestClient):
+        """Test cancelling a running query."""
+        mock_result = MagicMock(spec=QueryResult)
+        query_id = uuid4()
+        mock_result.query_id = query_id
+        mock_result.state = QueryState.RUNNING
+        mock_result.is_terminal = False
+
+        mock_cancelled_result = MagicMock(spec=QueryResult)
+        mock_cancelled_result.query_id = query_id
+        mock_cancelled_result.state = QueryState.CANCELLED
+
+        mock_executor = MagicMock()
+        mock_executor.get_status.side_effect = [mock_result, mock_cancelled_result]
+        mock_executor.cancel.return_value = True
+
+        with patch("iceberg_explorer.api.routes.query.get_executor", return_value=mock_executor):
+            response = client.post(f"/api/v1/query/{query_id}/cancel")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["query_id"] == str(query_id)
+        assert data["cancelled"] is True
+        assert data["status"] == "cancelled"
+
+    def test_cancel_completed_query(self, client: TestClient):
+        """Test cancelling an already completed query returns success."""
+        mock_result = MagicMock(spec=QueryResult)
+        query_id = uuid4()
+        mock_result.query_id = query_id
+        mock_result.state = QueryState.COMPLETED
+        mock_result.is_terminal = True
+
+        mock_executor = MagicMock()
+        mock_executor.get_status.return_value = mock_result
+        mock_executor.cancel.return_value = False
+
+        with patch("iceberg_explorer.api.routes.query.get_executor", return_value=mock_executor):
+            response = client.post(f"/api/v1/query/{query_id}/cancel")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["query_id"] == str(query_id)
+        assert data["cancelled"] is False
+        assert data["status"] == "completed"
+
+    def test_cancel_failed_query(self, client: TestClient):
+        """Test cancelling an already failed query returns success."""
+        mock_result = MagicMock(spec=QueryResult)
+        query_id = uuid4()
+        mock_result.query_id = query_id
+        mock_result.state = QueryState.FAILED
+        mock_result.is_terminal = True
+
+        mock_executor = MagicMock()
+        mock_executor.get_status.return_value = mock_result
+        mock_executor.cancel.return_value = False
+
+        with patch("iceberg_explorer.api.routes.query.get_executor", return_value=mock_executor):
+            response = client.post(f"/api/v1/query/{query_id}/cancel")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["cancelled"] is False
+        assert data["status"] == "failed"
+
+    def test_cancel_already_cancelled_query(self, client: TestClient):
+        """Test cancelling an already cancelled query returns success."""
+        mock_result = MagicMock(spec=QueryResult)
+        query_id = uuid4()
+        mock_result.query_id = query_id
+        mock_result.state = QueryState.CANCELLED
+        mock_result.is_terminal = True
+
+        mock_executor = MagicMock()
+        mock_executor.get_status.return_value = mock_result
+        mock_executor.cancel.return_value = False
+
+        with patch("iceberg_explorer.api.routes.query.get_executor", return_value=mock_executor):
+            response = client.post(f"/api/v1/query/{query_id}/cancel")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["cancelled"] is False
+        assert data["status"] == "cancelled"
+
+    def test_cancel_pending_query(self, client: TestClient):
+        """Test cancelling a pending query."""
+        mock_result = MagicMock(spec=QueryResult)
+        query_id = uuid4()
+        mock_result.query_id = query_id
+        mock_result.state = QueryState.PENDING
+        mock_result.is_terminal = False
+
+        mock_cancelled_result = MagicMock(spec=QueryResult)
+        mock_cancelled_result.query_id = query_id
+        mock_cancelled_result.state = QueryState.CANCELLED
+
+        mock_executor = MagicMock()
+        mock_executor.get_status.side_effect = [mock_result, mock_cancelled_result]
+        mock_executor.cancel.return_value = True
+
+        with patch("iceberg_explorer.api.routes.query.get_executor", return_value=mock_executor):
+            response = client.post(f"/api/v1/query/{query_id}/cancel")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["cancelled"] is True
+
+    def test_cancel_query_not_found(self, client: TestClient):
+        """Test cancelling a non-existent query returns 404."""
+        mock_executor = MagicMock()
+        mock_executor.get_status.return_value = None
+
+        query_id = uuid4()
+        with patch("iceberg_explorer.api.routes.query.get_executor", return_value=mock_executor):
+            response = client.post(f"/api/v1/query/{query_id}/cancel")
+
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"].lower()
+
+    def test_cancel_invalid_query_id(self, client: TestClient):
+        """Test cancelling with invalid query ID format returns 400."""
+        response = client.post("/api/v1/query/invalid-uuid/cancel")
+
+        assert response.status_code == 400
+        assert "invalid" in response.json()["detail"].lower()
+
+    def test_cancel_response_model_validation(self):
+        """Test CancelQueryResponse model validation."""
+        from iceberg_explorer.models.query import CancelQueryResponse
+
+        response = CancelQueryResponse(
+            query_id="550e8400-e29b-41d4-a716-446655440000",
+            cancelled=True,
+            status="cancelled",
+        )
+        assert response.query_id == "550e8400-e29b-41d4-a716-446655440000"
+        assert response.cancelled is True
+        assert response.status == "cancelled"
+
+    def test_cancel_response_model_already_finished(self):
+        """Test CancelQueryResponse model for already finished query."""
+        from iceberg_explorer.models.query import CancelQueryResponse
+
+        response = CancelQueryResponse(
+            query_id="550e8400-e29b-41d4-a716-446655440000",
+            cancelled=False,
+            status="completed",
+        )
+        assert response.cancelled is False
+        assert response.status == "completed"
+
+    def test_cancel_endpoint_calls_executor_cancel(self, client: TestClient):
+        """Test that cancel endpoint calls executor.cancel with correct query_id."""
+        mock_result = MagicMock(spec=QueryResult)
+        query_id = uuid4()
+        mock_result.query_id = query_id
+        mock_result.state = QueryState.RUNNING
+
+        mock_cancelled_result = MagicMock(spec=QueryResult)
+        mock_cancelled_result.state = QueryState.CANCELLED
+
+        mock_executor = MagicMock()
+        mock_executor.get_status.side_effect = [mock_result, mock_cancelled_result]
+        mock_executor.cancel.return_value = True
+
+        with patch("iceberg_explorer.api.routes.query.get_executor", return_value=mock_executor):
+            client.post(f"/api/v1/query/{query_id}/cancel")
+
+        mock_executor.cancel.assert_called_once_with(query_id)

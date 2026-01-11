@@ -106,3 +106,17 @@ class QueryStatusResponse(BaseModel):
         default=None,
         description="Error message if query failed.",
     )
+
+
+class CancelQueryResponse(BaseModel):
+    """Response for query cancellation."""
+
+    query_id: str = Field(..., description="Query identifier.")
+    cancelled: bool = Field(
+        ...,
+        description="True if query was actively cancelled, False if already finished.",
+    )
+    status: str = Field(
+        ...,
+        description="Current query status after cancellation attempt.",
+    )

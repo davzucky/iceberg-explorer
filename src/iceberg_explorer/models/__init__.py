@@ -16,6 +16,7 @@ from iceberg_explorer.models.catalog import (
     TableSchemaResponse,
 )
 from iceberg_explorer.models.query import (
+    CancelQueryResponse,
     ExecuteQueryRequest,
     ExecuteQueryResponse,
     QueryErrorResponse,
@@ -27,6 +28,7 @@ from iceberg_explorer.models.query import (
 )
 
 __all__ = [
+    "CancelQueryResponse",
     "ColumnStatistics",
     "ExecuteQueryRequest",
     "ExecuteQueryResponse",
