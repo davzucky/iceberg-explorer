@@ -127,3 +127,21 @@ Thread: https://ampcode.com/threads/T-019bab0c-f772-77ad-9809-f355ad3b1087
   - Use `# noqa: ARG001` for intentionally unused function arguments (pagination params for future)
   - Filter out internal DuckDB schemas (main, information_schema, pg_catalog) from namespace listings
 ---
+
+## 2026-01-11 - US-006
+Thread: https://ampcode.com/threads/T-019bab11-c03d-773f-b10d-817ffe80ca82
+- What was implemented:
+  - GET /api/v1/catalog/namespaces/{namespace}/tables endpoint for listing tables
+  - Support for unit separator (\x1f / %1F) for multi-level namespace paths
+  - 404 error handling for non-existent namespaces
+  - Query information_schema.tables to retrieve table list
+  - Returns table identifiers with namespace array and table name
+  - 9 new tests (28 catalog tests total, 115 overall)
+- Files changed:
+  - src/iceberg_explorer/api/routes/catalog.py (updated - added list_tables endpoint)
+  - tests/test_catalog.py (updated - added TestListTablesEndpoint and TestTableIdentifierModel)
+- **Learnings for future iterations:**
+  - Query table_schema column to filter tables for correct namespace level
+  - Reuse existing helper functions (_parse_namespace, _build_namespace_path, _quote_identifier)
+  - Existing patterns from US-005 namespaces endpoint apply directly to tables endpoint
+---

@@ -55,7 +55,8 @@
           "id": "US-006",
           "title": "List Tables Endpoint",
           "description": "API endpoint to list tables in a namespace.\n\n**What to do:**\n- `GET /api/v1/catalog/namespaces/{namespace}/tables` returns table list\n- Namespace path uses unit separator for multi-level: `accounting%1Ftax`\n- Return table identifiers as `{namespace: [...], name: \"table_name\"}`\n- Return 404 for non-existent namespace\n\n**Files:**\n- src/iceberg_explorer/api/routes/catalog.py\n\n**Acceptance criteria:**\n- Integration test with sample tables\n- `uv run pytest` passes",
-          "dependsOn": ["US-005"]
+          "dependsOn": ["US-005"],
+          "passes": true
         },
         {
           "id": "US-007",
