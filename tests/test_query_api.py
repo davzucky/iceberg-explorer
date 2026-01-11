@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
+import pyarrow as pa
 import pytest
 from fastapi.testclient import TestClient
 
@@ -12,7 +14,7 @@ from iceberg_explorer.config import reset_settings
 from iceberg_explorer.main import app
 from iceberg_explorer.query.engine import reset_engine
 from iceberg_explorer.query.executor import reset_executor
-from iceberg_explorer.query.models import QueryResult, QueryState
+from iceberg_explorer.query.models import ExecutionMetrics, QueryResult, QueryState
 
 
 @pytest.fixture(autouse=True)
@@ -533,3 +535,379 @@ class TestExecuteQueryEndpoint:
 
         assert response.status_code == 200
         mock_executor.execute.assert_called_once_with("SELECT * FROM table1", timeout=None)
+
+
+class TestResultsStreamingModels:
+    """Tests for streaming results Pydantic models."""
+
+    def test_results_metadata_model(self):
+        """Test ResultsMetadata model."""
+        from iceberg_explorer.models.query import ResultsMetadata
+
+        metadata = ResultsMetadata(
+            query_id="test-id",
+            columns=[{"name": "col1", "type": "int64"}],
+            total_rows=100,
+        )
+        assert metadata.type == "metadata"
+        assert metadata.query_id == "test-id"
+        assert len(metadata.columns) == 1
+        assert metadata.total_rows == 100
+
+    def test_results_batch_model(self):
+        """Test ResultsBatch model."""
+        from iceberg_explorer.models.query import ResultsBatch
+
+        batch = ResultsBatch(
+            rows=[[1, "a"], [2, "b"]],
+            batch_index=0,
+        )
+        assert batch.type == "data"
+        assert len(batch.rows) == 2
+        assert batch.batch_index == 0
+
+    def test_results_progress_model(self):
+        """Test ResultsProgress model."""
+        from iceberg_explorer.models.query import ResultsProgress
+
+        progress = ResultsProgress(
+            rows_sent=50,
+            total_rows=100,
+        )
+        assert progress.type == "progress"
+        assert progress.rows_sent == 50
+        assert progress.total_rows == 100
+
+    def test_results_complete_model(self):
+        """Test ResultsComplete model."""
+        from iceberg_explorer.models.query import ResultsComplete
+
+        complete = ResultsComplete(
+            query_id="test-id",
+            rows_returned=100,
+            duration_seconds=1.5,
+        )
+        assert complete.type == "complete"
+        assert complete.query_id == "test-id"
+        assert complete.rows_returned == 100
+        assert complete.duration_seconds == 1.5
+
+
+class TestGetResultsEndpoint:
+    """Tests for GET /api/v1/query/{query_id}/results endpoint."""
+
+    def _create_mock_result(
+        self,
+        state: QueryState = QueryState.COMPLETED,
+        rows: list[list] | None = None,
+        columns: list[str] | None = None,
+    ) -> tuple[MagicMock, uuid4]:
+        """Create a mock QueryResult with Arrow batches."""
+        query_id = uuid4()
+
+        if rows is None:
+            rows = [[1, "a"], [2, "b"], [3, "c"]]
+        if columns is None:
+            columns = ["id", "name"]
+
+        schema = pa.schema([
+            pa.field("id", pa.int64()),
+            pa.field("name", pa.string()),
+        ])
+
+        if rows:
+            arrays = [
+                pa.array([r[0] for r in rows]),
+                pa.array([r[1] for r in rows]),
+            ]
+            batch = pa.RecordBatch.from_arrays(arrays, schema=schema)
+            batches = [batch]
+        else:
+            batches = []
+
+        mock_result = MagicMock(spec=QueryResult)
+        mock_result.query_id = query_id
+        mock_result.state = state
+        mock_result.schema = schema
+        mock_result.batches = batches
+        mock_result.error_message = None
+        mock_result.metrics = MagicMock(spec=ExecutionMetrics)
+        mock_result.metrics.duration_seconds = 0.5
+
+        return mock_result, query_id
+
+    def test_stream_results_success(self, client: TestClient):
+        """Test streaming results for a completed query."""
+        mock_result, query_id = self._create_mock_result()
+        mock_executor = MagicMock()
+        mock_executor.get_status.return_value = mock_result
+
+        with patch("iceberg_explorer.api.routes.query.get_executor", return_value=mock_executor):
+            response = client.get(f"/api/v1/query/{query_id}/results")
+
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/x-ndjson"
+
+        lines = [json.loads(line) for line in response.text.strip().split("\n")]
+
+        assert lines[0]["type"] == "metadata"
+        assert lines[0]["query_id"] == str(query_id)
+        assert lines[0]["total_rows"] == 3
+        assert len(lines[0]["columns"]) == 2
+
+        assert lines[-1]["type"] == "complete"
+        assert lines[-1]["rows_returned"] == 3
+        assert lines[-1]["duration_seconds"] == 0.5
+
+    def test_stream_results_with_data_batches(self, client: TestClient):
+        """Test streaming includes data batches."""
+        mock_result, query_id = self._create_mock_result()
+        mock_executor = MagicMock()
+        mock_executor.get_status.return_value = mock_result
+
+        with patch("iceberg_explorer.api.routes.query.get_executor", return_value=mock_executor):
+            response = client.get(f"/api/v1/query/{query_id}/results")
+
+        lines = [json.loads(line) for line in response.text.strip().split("\n")]
+
+        data_lines = [item for item in lines if item["type"] == "data"]
+        assert len(data_lines) > 0
+
+        all_rows = []
+        for batch in data_lines:
+            all_rows.extend(batch["rows"])
+        assert len(all_rows) == 3
+        assert all_rows[0] == [1, "a"]
+
+    def test_stream_results_query_not_found(self, client: TestClient):
+        """Test streaming when query is not found."""
+        mock_executor = MagicMock()
+        mock_executor.get_status.return_value = None
+
+        query_id = uuid4()
+        with patch("iceberg_explorer.api.routes.query.get_executor", return_value=mock_executor):
+            response = client.get(f"/api/v1/query/{query_id}/results")
+
+        assert response.status_code == 200
+        lines = [json.loads(line) for line in response.text.strip().split("\n")]
+        assert lines[0]["type"] == "error"
+        assert "not found" in lines[0]["error"].lower()
+
+    def test_stream_results_invalid_query_id(self, client: TestClient):
+        """Test streaming with invalid query ID format."""
+        response = client.get("/api/v1/query/invalid-uuid/results")
+
+        assert response.status_code == 200
+        lines = [json.loads(line) for line in response.text.strip().split("\n")]
+        assert lines[0]["type"] == "error"
+        assert "invalid" in lines[0]["error"].lower()
+
+    def test_stream_results_failed_query(self, client: TestClient):
+        """Test streaming when query has failed."""
+        mock_result, query_id = self._create_mock_result(state=QueryState.FAILED)
+        mock_result.error_message = "Query timeout"
+        mock_executor = MagicMock()
+        mock_executor.get_status.return_value = mock_result
+
+        with patch("iceberg_explorer.api.routes.query.get_executor", return_value=mock_executor):
+            response = client.get(f"/api/v1/query/{query_id}/results")
+
+        lines = [json.loads(line) for line in response.text.strip().split("\n")]
+        assert lines[0]["type"] == "error"
+        assert "Query timeout" in lines[0]["error"]
+
+    def test_stream_results_cancelled_query(self, client: TestClient):
+        """Test streaming when query was cancelled."""
+        mock_result, query_id = self._create_mock_result(state=QueryState.CANCELLED)
+        mock_executor = MagicMock()
+        mock_executor.get_status.return_value = mock_result
+
+        with patch("iceberg_explorer.api.routes.query.get_executor", return_value=mock_executor):
+            response = client.get(f"/api/v1/query/{query_id}/results")
+
+        lines = [json.loads(line) for line in response.text.strip().split("\n")]
+        assert lines[0]["type"] == "error"
+        assert "cancelled" in lines[0]["error"].lower() or "not ready" in lines[0]["error"].lower()
+
+    def test_stream_results_page_size_100(self, client: TestClient):
+        """Test streaming with page_size=100."""
+        rows = [[i, f"name{i}"] for i in range(150)]
+        mock_result, query_id = self._create_mock_result(rows=rows)
+        mock_executor = MagicMock()
+        mock_executor.get_status.return_value = mock_result
+
+        with patch("iceberg_explorer.api.routes.query.get_executor", return_value=mock_executor):
+            response = client.get(f"/api/v1/query/{query_id}/results?page_size=100")
+
+        lines = [json.loads(line) for line in response.text.strip().split("\n")]
+        complete = next(item for item in lines if item["type"] == "complete")
+        assert complete["rows_returned"] == 100
+
+    def test_stream_results_page_size_250(self, client: TestClient):
+        """Test streaming with page_size=250."""
+        rows = [[i, f"name{i}"] for i in range(300)]
+        mock_result, query_id = self._create_mock_result(rows=rows)
+        mock_executor = MagicMock()
+        mock_executor.get_status.return_value = mock_result
+
+        with patch("iceberg_explorer.api.routes.query.get_executor", return_value=mock_executor):
+            response = client.get(f"/api/v1/query/{query_id}/results?page_size=250")
+
+        lines = [json.loads(line) for line in response.text.strip().split("\n")]
+        complete = next(item for item in lines if item["type"] == "complete")
+        assert complete["rows_returned"] == 250
+
+    def test_stream_results_page_size_500(self, client: TestClient):
+        """Test streaming with page_size=500."""
+        rows = [[i, f"name{i}"] for i in range(600)]
+        mock_result, query_id = self._create_mock_result(rows=rows)
+        mock_executor = MagicMock()
+        mock_executor.get_status.return_value = mock_result
+
+        with patch("iceberg_explorer.api.routes.query.get_executor", return_value=mock_executor):
+            response = client.get(f"/api/v1/query/{query_id}/results?page_size=500")
+
+        lines = [json.loads(line) for line in response.text.strip().split("\n")]
+        complete = next(item for item in lines if item["type"] == "complete")
+        assert complete["rows_returned"] == 500
+
+    def test_stream_results_page_size_1000(self, client: TestClient):
+        """Test streaming with page_size=1000."""
+        rows = [[i, f"name{i}"] for i in range(1200)]
+        mock_result, query_id = self._create_mock_result(rows=rows)
+        mock_executor = MagicMock()
+        mock_executor.get_status.return_value = mock_result
+
+        with patch("iceberg_explorer.api.routes.query.get_executor", return_value=mock_executor):
+            response = client.get(f"/api/v1/query/{query_id}/results?page_size=1000")
+
+        lines = [json.loads(line) for line in response.text.strip().split("\n")]
+        complete = next(item for item in lines if item["type"] == "complete")
+        assert complete["rows_returned"] == 1000
+
+    def test_stream_results_invalid_page_size(self, client: TestClient):
+        """Test streaming with invalid page_size."""
+        query_id = uuid4()
+        response = client.get(f"/api/v1/query/{query_id}/results?page_size=50")
+
+        assert response.status_code == 400
+        assert "Invalid page_size" in response.json()["detail"]
+
+    def test_stream_results_with_offset(self, client: TestClient):
+        """Test streaming with offset parameter."""
+        rows = [[i, f"name{i}"] for i in range(200)]
+        mock_result, query_id = self._create_mock_result(rows=rows)
+        mock_executor = MagicMock()
+        mock_executor.get_status.return_value = mock_result
+
+        with patch("iceberg_explorer.api.routes.query.get_executor", return_value=mock_executor):
+            response = client.get(f"/api/v1/query/{query_id}/results?page_size=100&offset=50")
+
+        lines = [json.loads(line) for line in response.text.strip().split("\n")]
+        data_lines = [item for item in lines if item["type"] == "data"]
+
+        all_rows = []
+        for batch in data_lines:
+            all_rows.extend(batch["rows"])
+
+        if len(all_rows) > 0:
+            assert all_rows[0][0] == 50
+
+    def test_stream_results_offset_beyond_data(self, client: TestClient):
+        """Test streaming with offset beyond data."""
+        rows = [[i, f"name{i}"] for i in range(50)]
+        mock_result, query_id = self._create_mock_result(rows=rows)
+        mock_executor = MagicMock()
+        mock_executor.get_status.return_value = mock_result
+
+        with patch("iceberg_explorer.api.routes.query.get_executor", return_value=mock_executor):
+            response = client.get(f"/api/v1/query/{query_id}/results?page_size=100&offset=100")
+
+        lines = [json.loads(line) for line in response.text.strip().split("\n")]
+        complete = next(item for item in lines if item["type"] == "complete")
+        assert complete["rows_returned"] == 0
+
+    def test_stream_results_empty_result(self, client: TestClient):
+        """Test streaming with empty result set."""
+        mock_result, query_id = self._create_mock_result(rows=[])
+        mock_executor = MagicMock()
+        mock_executor.get_status.return_value = mock_result
+
+        with patch("iceberg_explorer.api.routes.query.get_executor", return_value=mock_executor):
+            response = client.get(f"/api/v1/query/{query_id}/results")
+
+        lines = [json.loads(line) for line in response.text.strip().split("\n")]
+
+        metadata = next(item for item in lines if item["type"] == "metadata")
+        assert metadata["total_rows"] == 0
+
+        complete = next(item for item in lines if item["type"] == "complete")
+        assert complete["rows_returned"] == 0
+
+    def test_stream_results_includes_progress(self, client: TestClient):
+        """Test streaming includes progress updates."""
+        rows = [[i, f"name{i}"] for i in range(150)]
+        mock_result, query_id = self._create_mock_result(rows=rows)
+        mock_executor = MagicMock()
+        mock_executor.get_status.return_value = mock_result
+
+        with patch("iceberg_explorer.api.routes.query.get_executor", return_value=mock_executor):
+            response = client.get(f"/api/v1/query/{query_id}/results")
+
+        lines = [json.loads(line) for line in response.text.strip().split("\n")]
+        progress_lines = [item for item in lines if item["type"] == "progress"]
+        assert len(progress_lines) > 0
+        assert "rows_sent" in progress_lines[0]
+        assert "total_rows" in progress_lines[0]
+
+    def test_stream_results_includes_execution_metrics(self, client: TestClient):
+        """Test streaming includes execution metrics in complete message."""
+        mock_result, query_id = self._create_mock_result()
+        mock_result.metrics.duration_seconds = 2.5
+        mock_executor = MagicMock()
+        mock_executor.get_status.return_value = mock_result
+
+        with patch("iceberg_explorer.api.routes.query.get_executor", return_value=mock_executor):
+            response = client.get(f"/api/v1/query/{query_id}/results")
+
+        lines = [json.loads(line) for line in response.text.strip().split("\n")]
+        complete = next(item for item in lines if item["type"] == "complete")
+        assert complete["duration_seconds"] == 2.5
+
+    def test_stream_results_columns_in_metadata(self, client: TestClient):
+        """Test that column info is included in metadata."""
+        mock_result, query_id = self._create_mock_result()
+        mock_executor = MagicMock()
+        mock_executor.get_status.return_value = mock_result
+
+        with patch("iceberg_explorer.api.routes.query.get_executor", return_value=mock_executor):
+            response = client.get(f"/api/v1/query/{query_id}/results")
+
+        lines = [json.loads(line) for line in response.text.strip().split("\n")]
+        metadata = next(item for item in lines if item["type"] == "metadata")
+
+        assert len(metadata["columns"]) == 2
+        assert metadata["columns"][0]["name"] == "id"
+        assert "int" in metadata["columns"][0]["type"].lower()
+        assert metadata["columns"][1]["name"] == "name"
+
+    def test_stream_results_negative_offset_rejected(self, client: TestClient):
+        """Test that negative offset is rejected."""
+        query_id = uuid4()
+        response = client.get(f"/api/v1/query/{query_id}/results?offset=-10")
+
+        assert response.status_code == 422
+
+    def test_stream_results_json_lines_format(self, client: TestClient):
+        """Test that response is valid JSON lines format."""
+        mock_result, query_id = self._create_mock_result()
+        mock_executor = MagicMock()
+        mock_executor.get_status.return_value = mock_result
+
+        with patch("iceberg_explorer.api.routes.query.get_executor", return_value=mock_executor):
+            response = client.get(f"/api/v1/query/{query_id}/results")
+
+        lines = response.text.strip().split("\n")
+        for line in lines:
+            parsed = json.loads(line)
+            assert "type" in parsed

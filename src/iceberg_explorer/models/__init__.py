@@ -19,6 +19,10 @@ from iceberg_explorer.models.query import (
     ExecuteQueryRequest,
     ExecuteQueryResponse,
     QueryErrorResponse,
+    ResultsBatch,
+    ResultsComplete,
+    ResultsMetadata,
+    ResultsProgress,
 )
 
 __all__ = [
@@ -31,6 +35,10 @@ __all__ = [
     "PartitionField",
     "PartitionSpec",
     "QueryErrorResponse",
+    "ResultsBatch",
+    "ResultsComplete",
+    "ResultsMetadata",
+    "ResultsProgress",
     "SchemaField",
     "Snapshot",
     "SortField",

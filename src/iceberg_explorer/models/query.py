@@ -51,3 +51,40 @@ class QueryErrorResponse(BaseModel):
         default=None,
         description="Query ID if one was assigned before the error occurred.",
     )
+
+
+class ResultsMetadata(BaseModel):
+    """Metadata about query results, sent as first streaming message."""
+
+    type: str = Field(default="metadata", description="Message type identifier.")
+    query_id: str = Field(..., description="Query identifier.")
+    columns: list[dict] = Field(
+        ...,
+        description="Column definitions with name and type.",
+    )
+    total_rows: int = Field(..., description="Total number of rows in result set.")
+
+
+class ResultsBatch(BaseModel):
+    """A batch of result rows, streamed as JSON lines."""
+
+    type: str = Field(default="data", description="Message type identifier.")
+    rows: list[list] = Field(..., description="Rows in this batch as arrays.")
+    batch_index: int = Field(..., description="Index of this batch (0-based).")
+
+
+class ResultsProgress(BaseModel):
+    """Progress update during streaming."""
+
+    type: str = Field(default="progress", description="Message type identifier.")
+    rows_sent: int = Field(..., description="Number of rows sent so far.")
+    total_rows: int = Field(..., description="Total number of rows.")
+
+
+class ResultsComplete(BaseModel):
+    """Completion message with execution metrics."""
+
+    type: str = Field(default="complete", description="Message type identifier.")
+    query_id: str = Field(..., description="Query identifier.")
+    rows_returned: int = Field(..., description="Total rows returned.")
+    duration_seconds: float = Field(..., description="Query execution duration.")
