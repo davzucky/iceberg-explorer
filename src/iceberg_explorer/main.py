@@ -3,6 +3,7 @@
 from fastapi import FastAPI
 
 from iceberg_explorer.api.routes.catalog import router as catalog_router
+from iceberg_explorer.api.routes.query import router as query_router
 
 app = FastAPI(
     title="Iceberg Explorer",
@@ -11,6 +12,7 @@ app = FastAPI(
 )
 
 app.include_router(catalog_router)
+app.include_router(query_router)
 
 
 @app.get("/")

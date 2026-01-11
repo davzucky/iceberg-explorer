@@ -15,14 +15,22 @@ from iceberg_explorer.models.catalog import (
     TableIdentifier,
     TableSchemaResponse,
 )
+from iceberg_explorer.models.query import (
+    ExecuteQueryRequest,
+    ExecuteQueryResponse,
+    QueryErrorResponse,
+)
 
 __all__ = [
     "ColumnStatistics",
+    "ExecuteQueryRequest",
+    "ExecuteQueryResponse",
     "ListNamespacesResponse",
     "ListTablesResponse",
     "NamespaceIdentifier",
     "PartitionField",
     "PartitionSpec",
+    "QueryErrorResponse",
     "SchemaField",
     "Snapshot",
     "SortField",
