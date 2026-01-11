@@ -48,7 +48,8 @@
           "id": "US-005",
           "title": "List Namespaces Endpoint",
           "description": "API endpoint to list namespaces for browsing data.\n\n**What to do:**\n- `GET /api/v1/catalog/namespaces` returns top-level namespace list\n- `GET /api/v1/catalog/namespaces?parent={ns}` returns child namespaces\n- Parent parameter uses unit separator (`%1F`) for multi-level: `parent=accounting%1Ftax`\n- Namespaces returned as arrays: `[[\"accounting\"], [\"engineering\"]]`\n- Support pagination with `page-token` and `page-size` params\n- Return 404 if parent namespace doesn't exist\n\n**Files:**\n- src/iceberg_explorer/api/routes/catalog.py\n- src/iceberg_explorer/models/catalog.py\n\n**Acceptance criteria:**\n- Empty list for catalogs with no namespaces\n- Integration test with nested namespace hierarchy\n- `uv run pytest` passes",
-          "dependsOn": ["US-003"]
+          "dependsOn": ["US-003"],
+          "passes": true
         },
         {
           "id": "US-006",

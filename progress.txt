@@ -9,6 +9,8 @@
 - Use `get_executor()` for cached QueryExecutor, `reset_executor()` in tests to clear cache
 - DuckDB returns settings as native types (int for threads, MiB/GiB strings for memory) - don't assume string format
 - Use `validate_sql()` to check SQL before execution; blocks INSERT, UPDATE, DELETE, DROP, CREATE, ALTER, etc.
+- API routes in `api/routes/*.py`, register routers in `main.py` with `app.include_router()`
+- Multi-level namespace paths use unit separator (\x1f / %1F) as delimiter in API
 
 ---
 
@@ -100,4 +102,28 @@ Thread: https://ampcode.com/threads/T-019bab08-d892-72cf-b151-1945e8347cff
   - Use threading.Event for cancellation signaling between threads
   - Ruff SIM114 prefers combining multiple if-elif with same body into tuple check
   - Always reset_executor() in test fixtures alongside reset_engine() and reset_settings()
+---
+
+## 2026-01-11 - US-005
+Thread: https://ampcode.com/threads/T-019bab0c-f772-77ad-9809-f355ad3b1087
+- What was implemented:
+  - Created Pydantic models for catalog browsing in models/catalog.py
+  - NamespaceIdentifier, ListNamespacesResponse, TableIdentifier, ListTablesResponse
+  - GET /api/v1/catalog/namespaces endpoint for listing namespaces
+  - Support for parent namespace parameter with unit separator (\x1f / %1F) for multi-level
+  - 404 handling for non-existent parent namespaces
+  - page-token and page-size query parameters (pagination not yet implemented)
+  - Registered catalog router in main.py
+  - Comprehensive test coverage (19 new tests, 106 total)
+- Files changed:
+  - src/iceberg_explorer/models/catalog.py (new)
+  - src/iceberg_explorer/models/__init__.py (updated - exports)
+  - src/iceberg_explorer/api/routes/catalog.py (new)
+  - src/iceberg_explorer/main.py (updated - router registration)
+  - tests/test_catalog.py (new)
+- **Learnings for future iterations:**
+  - Unit separator character (\x1f) must be URL-encoded as %1F in HTTP requests
+  - Use `raise ... from e` for exception chaining (ruff B904)
+  - Use `# noqa: ARG001` for intentionally unused function arguments (pagination params for future)
+  - Filter out internal DuckDB schemas (main, information_schema, pg_catalog) from namespace listings
 ---
