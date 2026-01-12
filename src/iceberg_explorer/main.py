@@ -8,12 +8,15 @@ from iceberg_explorer.api.routes.export import router as export_router
 from iceberg_explorer.api.routes.health import router as health_router
 from iceberg_explorer.api.routes.query import router as query_router
 from iceberg_explorer.api.routes.ui import router as ui_router
+from iceberg_explorer.observability import setup_opentelemetry
 
 app = FastAPI(
     title="Iceberg Explorer",
     description="High-performance web application for interactive exploration of Apache Iceberg data lakes",
     version=__version__,
 )
+
+setup_opentelemetry(app)
 
 app.include_router(catalog_router)
 app.include_router(export_router)

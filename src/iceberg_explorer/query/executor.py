@@ -6,6 +6,7 @@ Provides:
 - Results as Arrow batches for streaming
 - Query cancellation via interrupt
 - Execution metrics tracking
+- OpenTelemetry spans for query execution
 """
 
 from __future__ import annotations
@@ -17,8 +18,16 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 import duckdb
+from opentelemetry import trace
 
 from iceberg_explorer.config import get_settings
+from iceberg_explorer.observability import (
+    decrement_active_queries,
+    get_tracer,
+    increment_active_queries,
+    record_query_duration,
+    record_query_rows,
+)
 from iceberg_explorer.query.engine import get_engine
 from iceberg_explorer.query.models import (
     InvalidSQLError,
@@ -169,12 +178,50 @@ class QueryExecutor:
             self._active_queries[result.query_id] = result
             self._cancel_flags[result.query_id] = cancel_event
 
-        try:
-            result.set_running()
-            self._execute_query(result, validated_timeout, cancel_event)
-        finally:
-            with self._lock:
-                self._cancel_flags.pop(result.query_id, None)
+        tracer = get_tracer()
+        with tracer.start_as_current_span(
+            "duckdb.query",
+            kind=trace.SpanKind.CLIENT,
+        ) as span:
+            span.set_attribute("db.system", "duckdb")
+            span.set_attribute("db.operation", "SELECT")
+            span.set_attribute("query.id", str(result.query_id))
+            span.set_attribute("query.timeout_seconds", validated_timeout)
+
+            increment_active_queries()
+            try:
+                result.set_running()
+                self._execute_query(result, validated_timeout, cancel_event)
+
+                if result.metrics:
+                    span.set_attribute("query.duration_seconds", result.metrics.duration_seconds)
+                    span.set_attribute("query.rows_returned", result.metrics.rows_returned)
+                    record_query_duration(result.metrics.duration_seconds, result.state.value)
+                    record_query_rows(result.metrics.rows_returned)
+
+                span.set_attribute("query.status", result.state.value)
+            except QueryTimeoutError:
+                span.set_attribute("query.status", "timeout")
+                span.set_status(trace.Status(trace.StatusCode.ERROR, "Query timeout"))
+                record_query_duration(validated_timeout, "timeout")
+                raise
+            except QueryCancelledError:
+                span.set_attribute("query.status", "cancelled")
+                span.set_status(trace.Status(trace.StatusCode.OK, "Query cancelled"))
+                if result.metrics:
+                    record_query_duration(result.metrics.duration_seconds, "cancelled")
+                raise
+            except Exception as e:
+                span.set_attribute("query.status", "failed")
+                span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
+                span.record_exception(e)
+                if result.metrics:
+                    record_query_duration(result.metrics.duration_seconds, "failed")
+                raise
+            finally:
+                decrement_active_queries()
+                with self._lock:
+                    self._cancel_flags.pop(result.query_id, None)
 
         return result
 
