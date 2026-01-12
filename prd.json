@@ -181,7 +181,8 @@
           "id": "US-021",
           "title": "OpenTelemetry Instrumentation",
           "description": "Observability via OpenTelemetry.\n\n**What to do:**\n- OpenTelemetry SDK integrated with auto-instrumentation\n- FastAPI routes automatically traced\n- DuckDB query spans with duration and row count attributes\n- Metrics: `query_duration_seconds`, `query_rows_returned`, `active_queries`\n- Configurable OTLP exporter endpoint\n- Service name set to `iceberg-explorer`\n- Structured JSON logs with trace context (trace_id, span_id)\n- No sensitive data in logs (no SQL content by default)\n\n**Acceptance criteria:**\n- Integration test verifying traces and metrics are emitted\n- `uv run pytest` passes",
-          "dependsOn": ["US-020"]
+          "dependsOn": ["US-020"],
+          "passes": true
         }
       ]
     }

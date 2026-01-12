@@ -20,6 +20,7 @@
 - Tailwind CSS via CDN for styling with custom `iceberg` color palette
 - UI partials use `hx-indicator` for inline loading spinners; templates use Alpine.js x-data for local state
 - Use `_encode_namespace()` to URL-encode namespace paths; `_generate_id()` for stable HTML element IDs
+- OpenTelemetry: use `get_tracer()` and `get_meter()` from observability.py; `reset_observability()` in tests
 
 ---
 
@@ -450,4 +451,29 @@ Thread: https://ampcode.com/threads/T-019bb1dc-3f41-7265-9ac7-a72115f28722
   - File download with fetch: create blob, create object URL, create anchor, click, cleanup
   - Get filename from Content-Disposition header with regex: /filename="?([^"]+)"?/
   - Browser automation timeouts may occur when loading heavy CDN resources like Monaco editor
+---
+
+## 2026-01-12 - US-021
+Thread: https://ampcode.com/threads/T-019bb1e3-9124-768d-a723-4949f3761778
+- What was implemented:
+  - Created observability.py module with OpenTelemetry SDK integration
+  - OpenTelemetry auto-instrumentation for FastAPI routes
+  - DuckDB query spans with db.system, db.operation, query.id, query.timeout_seconds attributes
+  - Span attributes for query completion: query.duration_seconds, query.rows_returned, query.status
+  - Metrics: query_duration_seconds histogram, query_rows_returned counter, active_queries gauge
+  - Configurable OTLP exporter endpoint via OTelConfig
+  - Structured JSON logging with trace context (trace_id, span_id) via structlog
+  - No SQL content recorded in spans (security: no sensitive data in telemetry)
+  - 22 new tests (324 total)
+- Files changed:
+  - src/iceberg_explorer/observability.py (new)
+  - src/iceberg_explorer/main.py (updated - setup_opentelemetry call)
+  - src/iceberg_explorer/query/executor.py (updated - tracing and metrics integration)
+  - tests/test_observability.py (new)
+- **Learnings for future iterations:**
+  - OpenTelemetry global tracer provider can only be set once per process
+  - Use get_tracer()/get_meter() with caching for consistent instrumentation
+  - structlog processors chain: add trace context via custom processor before JSONRenderer
+  - Use UpDownCounter for active query count (supports increment/decrement)
+  - Test OTel with mocked providers or in-memory exporters; avoid global provider conflicts in tests
 ---
