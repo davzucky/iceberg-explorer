@@ -115,7 +115,8 @@
           "id": "US-013",
           "title": "CSV Export Endpoint",
           "description": "API endpoint to export query results to CSV.\n\n**Priority Note:** Lower priority, implement after core functionality.\n\n**What to do:**\n- `POST /api/v1/export/csv` accepts query_id or inline SQL\n- Stream CSV as chunked download\n- Configurable max size (default 1GB)\n- Proper Content-Disposition header with filename\n- Handle large exports without memory issues\n\n**Files:**\n- src/iceberg_explorer/api/routes/export.py\n\n**Acceptance criteria:**\n- Integration test with various data types\n- `uv run pytest` passes",
-          "dependsOn": ["US-010"]
+          "dependsOn": ["US-010"],
+          "passes": true
         }
       ]
     },

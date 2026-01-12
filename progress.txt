@@ -410,3 +410,24 @@ Thread: https://ampcode.com/threads/T-019bb1ce-79bf-77cb-9dab-1ef0272e87ac
   - Numeric range filters use regex matching for operators (>, <, >=, <=)
   - formatCell() helper handles null, boolean, and object formatting
 ---
+
+## 2026-01-12 - US-013
+Thread: https://ampcode.com/threads/T-019bb1d5-dc7d-747c-86bd-c5308f1c4684
+- What was implemented:
+  - POST /api/v1/export/csv endpoint for exporting query results as CSV
+  - Accepts either query_id (from previously executed query) or inline SQL
+  - Streams CSV as chunked download with proper Content-Disposition header
+  - Configurable max export size via ExportConfig (default 1GB)
+  - Handles various data types: NULL, boolean, datetime, bytes, PyArrow scalars
+  - 28 new tests (302 total)
+- Files changed:
+  - src/iceberg_explorer/config.py (updated - added ExportConfig)
+  - src/iceberg_explorer/api/routes/export.py (new)
+  - src/iceberg_explorer/main.py (updated - registered export router)
+  - tests/test_export.py (new)
+- **Learnings for future iterations:**
+  - PyArrow scalars have as_py() method but return None for null values; must check after conversion
+  - Python csv module uses CRLF line endings by default; tests should strip lines when comparing
+  - Streaming CSV uses io.StringIO buffer with periodic flushing at 8KB to avoid memory issues
+  - ExportConfig follows same pattern as other config classes (pydantic-settings with env prefix)
+---
