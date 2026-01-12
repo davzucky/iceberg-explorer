@@ -257,6 +257,7 @@ class QueryExecutor:
                 active_conn.interrupt()
             except Exception:
                 pass
+            # Remove connection reference while holding lock to prevent race condition
             with self._lock:
                 self._active_conn.pop(query_id, None)
 

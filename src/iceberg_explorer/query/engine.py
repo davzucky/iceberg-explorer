@@ -101,8 +101,12 @@ class DuckDBEngine:
                 )
             """
 
-        conn.execute(attach_sql)
-        self._catalog_attached = True
+        try:
+            conn.execute(attach_sql)
+            self._catalog_attached = True
+        except Exception as e:
+            self._catalog_attached = False
+            raise RuntimeError(f"Failed to attach catalog: {e}") from e
 
     def initialize(self) -> None:
         """Initialize the engine and attach the catalog.
@@ -175,7 +179,8 @@ class DuckDBEngine:
             return result
 
         try:
-            self._connection.execute("SELECT 1").fetchone()
+            with self._lock:
+                self._connection.execute("SELECT 1").fetchone()
             result["duckdb"] = True
         except Exception as e:
             result["error"] = f"DuckDB error: {e}"
@@ -184,7 +189,8 @@ class DuckDBEngine:
         try:
             catalog_name = self.catalog_name
             quoted_catalog_name = '"' + catalog_name.replace('"', '""') + '"'
-            self._connection.execute(f"SELECT * FROM {quoted_catalog_name}.information_schema.schemata LIMIT 1")
+            with self._lock:
+                self._connection.execute(f"SELECT * FROM {quoted_catalog_name}.information_schema.schemata LIMIT 1")
             result["catalog"] = True
         except Exception as e:
             result["error"] = f"Catalog error: {e}"
