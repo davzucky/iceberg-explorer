@@ -82,6 +82,68 @@ class TestQueryPage:
 
         assert "Results" in content
 
+    def test_query_page_has_monaco_editor(self, client: TestClient) -> None:
+        """Query page loads Monaco editor."""
+        response = client.get("/query")
+        content = response.text
+
+        assert "monaco-editor" in content
+        assert 'id="editor-container"' in content
+
+    def test_query_page_has_run_button(self, client: TestClient) -> None:
+        """Query page has Run Query button."""
+        response = client.get("/query")
+        content = response.text
+
+        assert "Run Query" in content
+        assert "executeQuery()" in content
+
+    def test_query_page_has_cancel_button(self, client: TestClient) -> None:
+        """Query page has Cancel button for stopping queries."""
+        response = client.get("/query")
+        content = response.text
+
+        assert "Cancel" in content
+        assert "cancelQuery()" in content
+
+    def test_query_page_has_timeout_selector(self, client: TestClient) -> None:
+        """Query page has timeout dropdown selector."""
+        response = client.get("/query")
+        content = response.text
+
+        assert "Timeout:" in content
+        assert "<select" in content
+        assert 'value="30"' in content  # 30s option
+        assert 'value="60"' in content  # 60s option
+        assert 'value="300"' in content  # 5m option
+        assert 'value="900"' in content  # 15m option
+        assert 'value="3600"' in content  # 1h option
+
+    def test_query_page_has_error_display_area(self, client: TestClient) -> None:
+        """Query page has area for displaying errors."""
+        response = client.get("/query")
+        content = response.text
+
+        assert "Query Error" in content
+        assert "error" in content.lower()
+
+    def test_query_page_has_alpine_js_component(self, client: TestClient) -> None:
+        """Query page has Alpine.js queryEditor component."""
+        response = client.get("/query")
+        content = response.text
+
+        assert "queryEditor()" in content
+        assert "x-data" in content
+        assert "x-init" in content
+
+    def test_query_page_has_keyboard_shortcut(self, client: TestClient) -> None:
+        """Query page supports Ctrl+Enter keyboard shortcut."""
+        response = client.get("/query")
+        content = response.text
+
+        assert "KeyMod.CtrlCmd" in content or "CtrlCmd" in content
+        assert "KeyCode.Enter" in content or "Enter" in content
+
 
 class TestNamespaceTreePartial:
     """Tests for the namespace tree partial."""
