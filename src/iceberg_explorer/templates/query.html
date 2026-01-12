@@ -161,7 +161,30 @@
     <div class="rounded-lg bg-white p-6 shadow">
         <!-- Results header -->
         <div class="flex items-center justify-between mb-4">
-            <h2 class="text-lg font-semibold text-gray-900">Results</h2>
+            <div class="flex items-center space-x-4">
+                <h2 class="text-lg font-semibold text-gray-900">Results</h2>
+                <!-- Export CSV button -->
+                <button
+                    x-show="columns.length > 0 && queryId"
+                    x-cloak
+                    @click="exportCSV()"
+                    :disabled="isExporting || isExecuting || isStreaming"
+                    class="inline-flex items-center rounded-md bg-white px-3 py-1.5 text-sm font-medium text-gray-700 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    <template x-if="isExporting">
+                        <svg class="animate-spin mr-1.5 h-4 w-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                    </template>
+                    <template x-if="!isExporting">
+                        <svg class="mr-1.5 h-4 w-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                        </svg>
+                    </template>
+                    <span x-text="isExporting ? 'Exporting...' : 'Export CSV'"></span>
+                </button>
+            </div>
             <!-- Pagination controls -->
             <div x-show="columns.length > 0" class="flex items-center space-x-4">
                 <!-- Page size selector -->
@@ -335,6 +358,7 @@ function queryEditor() {
         timeout: 300,
         isExecuting: false,
         isStreaming: false,
+        isExporting: false,
         queryId: null,
         error: null,
         status: null,
@@ -717,6 +741,55 @@ function queryEditor() {
 
         changePageSize() {
             this.currentPage = 1;
+        },
+
+        async exportCSV() {
+            if (!this.queryId || this.isExporting) return;
+
+            this.isExporting = true;
+            this.error = null;
+
+            try {
+                const response = await fetch('/api/v1/export/csv', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        query_id: this.queryId
+                    })
+                });
+
+                if (!response.ok) {
+                    const data = await response.json();
+                    this.error = data.detail || 'Failed to export CSV';
+                    return;
+                }
+
+                // Get filename from Content-Disposition header
+                const disposition = response.headers.get('Content-Disposition');
+                let filename = 'export.csv';
+                if (disposition) {
+                    const match = disposition.match(/filename="?([^"]+)"?/);
+                    if (match) {
+                        filename = match[1];
+                    }
+                }
+
+                // Download the file
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+
+            } catch (err) {
+                this.error = err.message || 'Failed to export CSV';
+            } finally {
+                this.isExporting = false;
+            }
         }
     };
 }
