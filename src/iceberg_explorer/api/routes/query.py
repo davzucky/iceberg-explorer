@@ -119,111 +119,115 @@ async def _stream_results(
         yield json.dumps(error) + "\n"
         return
 
-    max_wait_seconds = 3600  # 1 hour max wait
-    waited = 0.0
-    while result.state == QueryState.RUNNING:
-        await asyncio.sleep(0.1)
-        waited += 0.1
-        if waited >= max_wait_seconds:
-            error = {"type": "error", "error": "Timeout waiting for query completion"}
+    try:
+        max_wait_seconds = 3600  # 1 hour max wait
+        waited = 0.0
+        while result.state == QueryState.RUNNING:
+            await asyncio.sleep(0.1)
+            waited += 0.1
+            if waited >= max_wait_seconds:
+                error = {"type": "error", "error": "Timeout waiting for query completion"}
+                yield json.dumps(error) + "\n"
+                return
+            result = executor.get_status(result_uuid)
+            if result is None:
+                error = {"type": "error", "error": "Query result was removed"}
+                yield json.dumps(error) + "\n"
+                return
+
+        if result.state != QueryState.COMPLETED:
+            error = {
+                "type": "error",
+                "error": result.error_message or f"Query {result.state.value}",
+                "status": result.state.value,
+            }
             yield json.dumps(error) + "\n"
             return
-        result = executor.get_status(result_uuid)
-        if result is None:
-            error = {"type": "error", "error": "Query result was removed"}
-            yield json.dumps(error) + "\n"
-            return
 
-    if result.state != QueryState.COMPLETED:
-        error = {
-            "type": "error",
-            "error": result.error_message or f"Query {result.state.value}",
-            "status": result.state.value,
-        }
-        yield json.dumps(error) + "\n"
-        return
+        schema = result.schema
+        batches = result.batches
 
-    schema = result.schema
-    batches = result.batches
+        if schema is None:
+            columns: list[dict] = []
+        else:
+            columns = [{"name": field.name, "type": str(field.type)} for field in schema]
 
-    if schema is None:
-        columns: list[dict] = []
-    else:
-        columns = [{"name": field.name, "type": str(field.type)} for field in schema]
+        total_rows = sum(batch.num_rows for batch in batches)
 
-    total_rows = sum(batch.num_rows for batch in batches)
+        metadata = ResultsMetadata(
+            query_id=query_id,
+            columns=columns,
+            total_rows=total_rows,
+        )
+        yield metadata.model_dump_json() + "\n"
 
-    metadata = ResultsMetadata(
-        query_id=query_id,
-        columns=columns,
-        total_rows=total_rows,
-    )
-    yield metadata.model_dump_json() + "\n"
+        rows_sent = 0
+        batch_index = 0
+        current_offset = offset
+        rows_to_send: list[list] = []
+        batch_size = 100
 
-    rows_sent = 0
-    batch_index = 0
-    current_offset = offset
-    rows_to_send: list[list] = []
-    batch_size = 100
+        for batch in batches:
+            batch_rows = batch.num_rows
 
-    for batch in batches:
-        batch_rows = batch.num_rows
+            if current_offset >= batch_rows:
+                current_offset -= batch_rows
+                continue
 
-        if current_offset >= batch_rows:
-            current_offset -= batch_rows
-            continue
+            start_idx = current_offset
+            current_offset = 0
 
-        start_idx = current_offset
-        current_offset = 0
+            for row_idx in range(start_idx, batch_rows):
+                if rows_sent >= page_size:
+                    break
 
-        for row_idx in range(start_idx, batch_rows):
+                row = [
+                    _convert_value(batch.column(col)[row_idx]) for col in range(batch.num_columns)
+                ]
+                rows_to_send.append(row)
+                rows_sent += 1
+
+                if len(rows_to_send) >= batch_size or rows_sent >= page_size:
+                    data_batch = ResultsBatch(
+                        rows=rows_to_send,
+                        batch_index=batch_index,
+                    )
+                    yield data_batch.model_dump_json() + "\n"
+                    batch_index += 1
+                    rows_to_send = []
+
+                    progress = ResultsProgress(
+                        rows_sent=rows_sent + offset,
+                        total_rows=total_rows,
+                    )
+                    yield progress.model_dump_json() + "\n"
+
             if rows_sent >= page_size:
                 break
 
-            row = [_convert_value(batch.column(col)[row_idx]) for col in range(batch.num_columns)]
-            rows_to_send.append(row)
-            rows_sent += 1
+        if len(rows_to_send) > 0:
+            data_batch = ResultsBatch(
+                rows=rows_to_send,
+                batch_index=batch_index,
+            )
+            yield data_batch.model_dump_json() + "\n"
 
-            if len(rows_to_send) >= batch_size or rows_sent >= page_size:
-                data_batch = ResultsBatch(
-                    rows=rows_to_send,
-                    batch_index=batch_index,
-                )
-                yield data_batch.model_dump_json() + "\n"
-                batch_index += 1
-                rows_to_send = []
+            progress = ResultsProgress(
+                rows_sent=rows_sent + offset,
+                total_rows=total_rows,
+            )
+            yield progress.model_dump_json() + "\n"
 
-                progress = ResultsProgress(
-                    rows_sent=rows_sent + offset,
-                    total_rows=total_rows,
-                )
-                yield progress.model_dump_json() + "\n"
-
-        if rows_sent >= page_size:
-            break
-
-    if len(rows_to_send) > 0:
-        data_batch = ResultsBatch(
-            rows=rows_to_send,
-            batch_index=batch_index,
+        complete = ResultsComplete(
+            query_id=query_id,
+            rows_returned=rows_sent,
+            duration_seconds=result.metrics.duration_seconds,
         )
-        yield data_batch.model_dump_json() + "\n"
-
-        progress = ResultsProgress(
-            rows_sent=rows_sent + offset,
-            total_rows=total_rows,
-        )
-        yield progress.model_dump_json() + "\n"
-
-    complete = ResultsComplete(
-        query_id=query_id,
-        rows_returned=rows_sent,
-        duration_seconds=result.metrics.duration_seconds,
-    )
-    yield complete.model_dump_json() + "\n"
-
-    # Clean up completed query from executor tracking to prevent memory leak
-    executor.cleanup(result_uuid)
+        yield complete.model_dump_json() + "\n"
+    finally:
+        # Clean up completed query from executor tracking to prevent memory leak
+        # This runs even if the client disconnects mid-stream
+        executor.cleanup(result_uuid)
 
 
 @router.get("/{query_id}/results")
