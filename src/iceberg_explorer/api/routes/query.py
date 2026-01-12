@@ -84,7 +84,7 @@ async def _stream_results(
     query_id: str,
     page_size: int,
     offset: int,
-) -> AsyncGenerator[str, None]:
+) -> AsyncGenerator[str]:
     """Stream query results as JSON lines.
 
     Format:
@@ -222,6 +222,9 @@ async def _stream_results(
     )
     yield complete.model_dump_json() + "\n"
 
+    # Clean up completed query from executor tracking to prevent memory leak
+    executor.cleanup(result_uuid)
+
 
 @router.get("/{query_id}/results")
 async def get_results(
@@ -345,3 +348,34 @@ async def cancel_query(query_id: str) -> CancelQueryResponse:
         cancelled=was_cancelled,
         status=current_status,
     )
+
+
+@router.delete("/{query_id}")
+async def cleanup_query(query_id: str) -> dict:
+    """Clean up a completed query and release its resources.
+
+    Removes the query from internal tracking, freeing memory associated
+    with query results. Should be called after clients are done consuming
+    results, especially for queries that produce large result sets.
+
+    Args:
+        query_id: Query identifier from execute endpoint.
+
+    Returns:
+        Dict with query_id and cleaned status.
+
+    Raises:
+        HTTPException: 400 if invalid query ID format.
+    """
+    try:
+        result_uuid = UUID(query_id)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid query ID format: {query_id}",
+        ) from e
+
+    executor = get_executor()
+    executor.cleanup(result_uuid)
+
+    return {"query_id": query_id, "cleaned": True}
