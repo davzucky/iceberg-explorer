@@ -191,6 +191,7 @@ class TestTableDetailsPartial:
     def test_table_details_invalid_path(self, client: TestClient) -> None:
         """Table details shows error for invalid path format."""
         response = client.get("/ui/partials/table-details?table_path=invalid")
+        assert response.status_code == 200
         content = response.text
         assert "Invalid table path" in content or "Error" in content
 

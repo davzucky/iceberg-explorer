@@ -32,6 +32,8 @@ _initialized = False
 
 _tracer: trace.Tracer | None = None
 _meter: metrics.Meter | None = None
+_tracer_provider: TracerProvider | None = None
+_meter_provider: MeterProvider | None = None
 
 _query_duration_histogram: metrics.Histogram | None = None
 _query_rows_counter: metrics.Counter | None = None
@@ -46,14 +48,7 @@ def get_tracer() -> trace.Tracer:
     """
     global _tracer
     if _tracer is None:
-        settings = get_settings()
-        _tracer = trace.get_tracer(
-            "iceberg_explorer",
-            schema_url=None,
-            tracer_provider=trace.get_tracer_provider(),
-        )
-        if not settings.otel.enabled:
-            _tracer = trace.get_tracer("iceberg_explorer")
+        _tracer = trace.get_tracer("iceberg_explorer")
     return _tracer
 
 
@@ -65,13 +60,7 @@ def get_meter() -> metrics.Meter:
     """
     global _meter
     if _meter is None:
-        settings = get_settings()
-        _meter = metrics.get_meter(
-            "iceberg_explorer",
-            meter_provider=metrics.get_meter_provider(),
-        )
-        if not settings.otel.enabled:
-            _meter = metrics.get_meter("iceberg_explorer")
+        _meter = metrics.get_meter("iceberg_explorer")
     return _meter
 
 
@@ -185,7 +174,7 @@ def setup_opentelemetry(app: FastAPI) -> None:
     Args:
         app: FastAPI application to instrument.
     """
-    global _initialized, _tracer, _meter
+    global _initialized, _tracer, _meter, _tracer_provider, _meter_provider
     global _query_duration_histogram, _query_rows_counter, _active_queries_gauge
 
     if _initialized:
@@ -208,6 +197,7 @@ def setup_opentelemetry(app: FastAPI) -> None:
     span_processor = BatchSpanProcessor(span_exporter)
     tracer_provider.add_span_processor(span_processor)
     trace.set_tracer_provider(tracer_provider)
+    _tracer_provider = tracer_provider
 
     metric_exporter = OTLPMetricExporter(
         endpoint=settings.otel.endpoint, insecure=settings.otel.insecure
@@ -215,6 +205,7 @@ def setup_opentelemetry(app: FastAPI) -> None:
     metric_reader = PeriodicExportingMetricReader(metric_exporter, export_interval_millis=10000)
     meter_provider = MeterProvider(resource=resource, metric_readers=[metric_reader])
     metrics.set_meter_provider(meter_provider)
+    _meter_provider = meter_provider
 
     _tracer = trace.get_tracer("iceberg_explorer")
     _meter = metrics.get_meter("iceberg_explorer")
@@ -242,14 +233,33 @@ def setup_opentelemetry(app: FastAPI) -> None:
     _initialized = True
 
 
+def shutdown_opentelemetry() -> None:
+    """Shutdown OpenTelemetry providers to flush pending telemetry."""
+    global _tracer_provider, _meter_provider
+    if _tracer_provider is not None:
+        _tracer_provider.force_flush(timeout_millis=5000)
+        _tracer_provider.shutdown()
+    if _meter_provider is not None:
+        _meter_provider.force_flush(timeout_millis=5000)
+        _meter_provider.shutdown()
+
+
 def reset_observability() -> None:
     """Reset observability state (useful for testing)."""
-    global _initialized, _tracer, _meter
+    import contextlib
+
+    global _initialized, _tracer, _meter, _tracer_provider, _meter_provider
     global _query_duration_histogram, _query_rows_counter, _active_queries_gauge
+
+    # Uninstrument FastAPI to avoid double-instrumentation on re-setup
+    with contextlib.suppress(Exception):
+        FastAPIInstrumentor.uninstrument()
 
     _initialized = False
     _tracer = None
     _meter = None
+    _tracer_provider = None
+    _meter_provider = None
     _query_duration_histogram = None
     _query_rows_counter = None
     _active_queries_gauge = None

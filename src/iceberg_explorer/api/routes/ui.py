@@ -117,6 +117,14 @@ async def namespace_children_partial(
 
     parent_parts = _parse_namespace(parent)
 
+    # Handle empty parent namespace - return empty result
+    if not parent_parts:
+        return templates.TemplateResponse(
+            request,
+            "partials/namespace_children.html",
+            {"namespaces": namespaces, "tables": tables, "level": 0},
+        )
+
     try:
         engine = get_engine()
         if not engine.is_initialized:
@@ -134,7 +142,7 @@ async def namespace_children_partial(
                 for row in result:
                     schema_name = row[0]
                     if schema_name not in ("main", "information_schema", "pg_catalog"):
-                        namespace_parts = parent_parts + [schema_name]
+                        namespace_parts = [*parent_parts, schema_name]
                         namespaces.append(
                             {
                                 "name": schema_name,
@@ -158,7 +166,7 @@ async def namespace_children_partial(
                             "name": table_name,
                             "namespace": parent_parts,
                             "table_path": table_path,
-                            "id": _generate_id(parent_parts + [table_name]),
+                            "id": _generate_id([*parent_parts, table_name]),
                         }
                     )
             except Exception as e:

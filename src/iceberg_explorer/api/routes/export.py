@@ -61,8 +61,6 @@ def _format_value(value: object) -> str:
 class CSVExportError(Exception):
     """Error during CSV export streaming."""
 
-    pass
-
 
 async def _stream_csv(
     query_id: UUID,
@@ -102,7 +100,7 @@ async def _stream_csv(
     if result.state == QueryState.CANCELLED:
         raise CSVExportError("Query was cancelled")
     if result.state == QueryState.FAILED:
-        error_msg = result.error if hasattr(result, "error") and result.error else "Unknown error"
+        error_msg = result.error_message if result.error_message else "Unknown error"
         raise CSVExportError(f"Query failed: {error_msg}")
     if result.state != QueryState.COMPLETED:
         raise CSVExportError(f"Query in unexpected state: {result.state}")
@@ -209,7 +207,10 @@ async def export_csv(request: CSVExportRequest) -> StreamingResponse:
             )
 
     filename = request.filename or f"export_{query_uuid}"
-    filename = filename.replace('"', "_").replace("/", "_")
+    # Sanitize for cross-platform filesystem and HTTP header safety
+    for char in '"/<>:\\|?*\x00\n\r':
+        filename = filename.replace(char, "_")
+    filename = filename[:200]  # Limit length
 
     headers = {
         "Content-Disposition": f'attachment; filename="{filename}.csv"',
