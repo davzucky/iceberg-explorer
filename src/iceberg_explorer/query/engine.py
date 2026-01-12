@@ -136,7 +136,7 @@ class DuckDBEngine:
                 self._catalog_attached = False
 
     @contextmanager
-    def get_connection(self) -> Generator[duckdb.DuckDBPyConnection, None, None]:
+    def get_connection(self) -> Generator[duckdb.DuckDBPyConnection]:
         """Get a DuckDB connection for query execution.
 
         This returns a cursor from the main connection, ensuring
@@ -178,12 +178,12 @@ class DuckDBEngine:
             "catalog": False,
         }
 
-        if self._connection is None:
-            result["error"] = "Engine not initialized"
-            return result
-
         try:
             with self._lock:
+                # Check inside lock to prevent race with close()
+                if self._connection is None:
+                    result["error"] = "Engine not initialized"
+                    return result
                 self._connection.execute("SELECT 1").fetchone()
             result["duckdb"] = True
         except Exception as e:
@@ -194,7 +194,13 @@ class DuckDBEngine:
             catalog_name = self.catalog_name
             quoted_catalog_name = '"' + catalog_name.replace('"', '""') + '"'
             with self._lock:
-                self._connection.execute(f"SELECT * FROM {quoted_catalog_name}.information_schema.schemata LIMIT 1")
+                # Check inside lock to prevent race with close()
+                if self._connection is None:
+                    result["error"] = "Engine closed during health check"
+                    return result
+                self._connection.execute(
+                    f"SELECT * FROM {quoted_catalog_name}.information_schema.schemata LIMIT 1"
+                )
             result["catalog"] = True
         except Exception as e:
             result["error"] = f"Catalog error: {e}"
