@@ -82,6 +82,21 @@ class ServerConfig(BaseSettings):
     port: int = Field(default=8080, ge=1, le=65535, description="Server port")
 
 
+class ExportConfig(BaseSettings):
+    """Configuration for data export."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="ICEBERG_EXPLORER_EXPORT__",
+        env_nested_delimiter="__",
+    )
+
+    max_size_bytes: int = Field(
+        default=1073741824,  # 1GB
+        ge=1,
+        description="Maximum export file size in bytes",
+    )
+
+
 class OTelConfig(BaseSettings):
     """Configuration for OpenTelemetry."""
 
@@ -91,9 +106,7 @@ class OTelConfig(BaseSettings):
     )
 
     enabled: bool = Field(default=False, description="Enable OpenTelemetry instrumentation")
-    endpoint: str = Field(
-        default="http://localhost:4317", description="OTLP exporter endpoint"
-    )
+    endpoint: str = Field(default="http://localhost:4317", description="OTLP exporter endpoint")
     service_name: str = Field(default="iceberg-explorer", description="Service name for traces")
 
 
@@ -111,6 +124,7 @@ class Settings(BaseSettings):
     query: QueryConfig = Field(default_factory=QueryConfig)
     duckdb: DuckDBConfig = Field(default_factory=DuckDBConfig)
     server: ServerConfig = Field(default_factory=ServerConfig)
+    export: ExportConfig = Field(default_factory=ExportConfig)
     otel: OTelConfig = Field(default_factory=OTelConfig)
 
     @model_validator(mode="before")

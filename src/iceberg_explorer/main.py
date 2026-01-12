@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from iceberg_explorer import __version__
 from iceberg_explorer.api.routes.catalog import router as catalog_router
+from iceberg_explorer.api.routes.export import router as export_router
 from iceberg_explorer.api.routes.health import router as health_router
 from iceberg_explorer.api.routes.query import router as query_router
 from iceberg_explorer.api.routes.ui import router as ui_router
@@ -15,6 +16,7 @@ app = FastAPI(
 )
 
 app.include_router(catalog_router)
+app.include_router(export_router)
 app.include_router(health_router)
 app.include_router(query_router)
 app.include_router(ui_router)
