@@ -10,6 +10,7 @@ Provides:
 
 from __future__ import annotations
 
+import contextlib
 import re
 import threading
 from typing import TYPE_CHECKING
@@ -61,6 +62,13 @@ FORBIDDEN_PATTERN = re.compile(
     re.IGNORECASE | re.MULTILINE,
 )
 
+# Pattern to detect forbidden keywords anywhere in SQL (not just line start)
+# This catches CTE bypass attempts like "WITH x AS (...) INSERT INTO ..."
+FORBIDDEN_ANYWHERE_PATTERN = re.compile(
+    r"\b(" + "|".join(FORBIDDEN_KEYWORDS) + r")\b",
+    re.IGNORECASE,
+)
+
 
 def validate_sql(sql: str) -> None:
     """Validate that SQL is a read-only SELECT statement.
@@ -79,6 +87,7 @@ def validate_sql(sql: str) -> None:
     if ";" in stripped.rstrip(";"):
         raise InvalidSQLError("Multiple statements or semicolons are not allowed")
 
+    # Check for forbidden keywords at line start
     match = FORBIDDEN_PATTERN.search(stripped)
     if match:
         keyword = match.group(1).upper() if match else "unknown"
@@ -89,6 +98,13 @@ def validate_sql(sql: str) -> None:
     allowed_prefixes = ("WITH ", "SELECT ", "EXPLAIN ", "DESCRIBE ", "SHOW ")
     if not any(normalized.startswith(prefix) for prefix in allowed_prefixes):
         raise InvalidSQLError("Only SELECT, EXPLAIN, DESCRIBE, and SHOW statements are allowed")
+
+    # Additional check: scan for forbidden keywords anywhere in the query
+    # This catches CTE bypass attempts like "WITH x AS (...) INSERT INTO ..."
+    anywhere_match = FORBIDDEN_ANYWHERE_PATTERN.search(normalized)
+    if anywhere_match:
+        keyword = anywhere_match.group(1).upper()
+        raise InvalidSQLError(f"Write operations are not allowed: {keyword}")
 
 
 class QueryExecutor:
@@ -213,10 +229,8 @@ class QueryExecutor:
             with self._lock:
                 active_conn = self._active_conn.get(result.query_id)
                 if active_conn is not None:
-                    try:
+                    with contextlib.suppress(Exception):
                         active_conn.interrupt()
-                    except Exception:
-                        pass
                     self._active_conn.pop(result.query_id, None)
             result.set_failed("Query timeout exceeded")
             raise QueryTimeoutError(f"Query exceeded {timeout}s timeout")
@@ -253,10 +267,8 @@ class QueryExecutor:
             cancel_event.set()
 
             if active_conn is not None:
-                try:
+                with contextlib.suppress(Exception):
                     active_conn.interrupt()
-                except Exception:
-                    pass
                 self._active_conn.pop(query_id, None)
 
             if result.state == QueryState.RUNNING:
