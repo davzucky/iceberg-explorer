@@ -531,8 +531,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "duckdb", specifier = ">=1.1.0" },
-    { name = "fastapi", specifier = ">=0.115.0" },
+    { name = "duckdb", specifier = ">=1.4.2" },
+    { name = "fastapi", specifier = ">=0.115.3" },
     { name = "granian", specifier = ">=1.6.0" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27.0" },
     { name = "jinja2", specifier = ">=3.1.0" },
