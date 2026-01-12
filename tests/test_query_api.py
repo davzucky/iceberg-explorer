@@ -236,7 +236,9 @@ class TestExecuteQueryEndpoint:
         with patch("iceberg_explorer.api.routes.query.get_executor", return_value=mock_executor):
             response = client.post(
                 "/api/v1/query/execute",
-                json={"sql": "SELECT u.name, o.total FROM users u JOIN orders o ON u.id = o.user_id"},
+                json={
+                    "sql": "SELECT u.name, o.total FROM users u JOIN orders o ON u.id = o.user_id"
+                },
             )
 
         assert response.status_code == 200
@@ -253,7 +255,9 @@ class TestExecuteQueryEndpoint:
         with patch("iceberg_explorer.api.routes.query.get_executor", return_value=mock_executor):
             response = client.post(
                 "/api/v1/query/execute",
-                json={"sql": "WITH active_users AS (SELECT * FROM users WHERE active = true) SELECT * FROM active_users"},
+                json={
+                    "sql": "WITH active_users AS (SELECT * FROM users WHERE active = true) SELECT * FROM active_users"
+                },
             )
 
         assert response.status_code == 200
@@ -610,10 +614,12 @@ class TestGetResultsEndpoint:
         if columns is None:
             columns = ["id", "name"]
 
-        schema = pa.schema([
-            pa.field("id", pa.int64()),
-            pa.field("name", pa.string()),
-        ])
+        schema = pa.schema(
+            [
+                pa.field("id", pa.int64()),
+                pa.field("name", pa.string()),
+            ]
+        )
 
         if rows:
             arrays = [
@@ -939,7 +945,7 @@ class TestQueryStatusEndpoint:
         assert data["error_message"] is None
 
     def test_status_running_query(self, client: TestClient):
-        """Test status for running query with progress info."""
+        """Test status for running query - rows_processed is None until complete."""
         mock_result = MagicMock(spec=QueryResult)
         query_id = uuid4()
         mock_result.query_id = query_id
@@ -957,7 +963,8 @@ class TestQueryStatusEndpoint:
         data = response.json()
         assert data["query_id"] == str(query_id)
         assert data["status"] == "running"
-        assert data["rows_processed"] == 500
+        # rows_processed is None during RUNNING to avoid ambiguity with 0 rows
+        assert data["rows_processed"] is None
         assert data["error_message"] is None
 
     def test_status_completed_query(self, client: TestClient):

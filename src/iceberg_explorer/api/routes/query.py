@@ -298,7 +298,7 @@ async def get_query_status(query_id: str) -> QueryStatusResponse:
         )
 
     rows_processed: int | None = None
-    if result.state in (QueryState.RUNNING, QueryState.COMPLETED):
+    if result.state == QueryState.COMPLETED:
         rows_processed = result.metrics.rows_returned
 
     return QueryStatusResponse(
