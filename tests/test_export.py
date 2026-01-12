@@ -379,7 +379,8 @@ class TestCSVExportEndpoint:
 
         assert response.status_code == 200
         content = response.content.decode("utf-8")
-        assert '"Hello, ""World"""' in content or "Hello" in content
+        # Verify RFC 4180 compliant CSV escaping: embedded quotes are doubled, field is quoted
+        assert '"Hello, ""World"""' in content
 
     def test_export_csv_empty_result(self, client: TestClient):
         """Test CSV export with empty result set."""

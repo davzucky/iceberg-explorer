@@ -202,12 +202,16 @@ def setup_opentelemetry(app: FastAPI) -> None:
     resource = Resource.create({SERVICE_NAME: settings.otel.service_name})
 
     tracer_provider = TracerProvider(resource=resource)
-    span_exporter = OTLPSpanExporter(endpoint=settings.otel.endpoint, insecure=True)
+    span_exporter = OTLPSpanExporter(
+        endpoint=settings.otel.endpoint, insecure=settings.otel.insecure
+    )
     span_processor = BatchSpanProcessor(span_exporter)
     tracer_provider.add_span_processor(span_processor)
     trace.set_tracer_provider(tracer_provider)
 
-    metric_exporter = OTLPMetricExporter(endpoint=settings.otel.endpoint, insecure=True)
+    metric_exporter = OTLPMetricExporter(
+        endpoint=settings.otel.endpoint, insecure=settings.otel.insecure
+    )
     metric_reader = PeriodicExportingMetricReader(metric_exporter, export_interval_millis=10000)
     meter_provider = MeterProvider(resource=resource, metric_readers=[metric_reader])
     metrics.set_meter_provider(meter_provider)

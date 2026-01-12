@@ -281,6 +281,9 @@ async def table_details_partial(
                     logger.debug("Failed to fetch metadata: %s", e)
 
                 partition_column_list = sorted(partition_columns) if partition_columns else []
+                current_snapshot = (
+                    max(snapshots, key=lambda s: s["sequence_number"]) if snapshots else None
+                )
                 table_info = {
                     "namespace": namespace_parts,
                     "name": table_name,
@@ -298,6 +301,7 @@ async def table_details_partial(
                         for col in columns
                     ],
                     "snapshots": snapshots,
+                    "current_snapshot": current_snapshot,
                 }
     except Exception as e:
         logger.warning("Failed to load table details: %s", e)

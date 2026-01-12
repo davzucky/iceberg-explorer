@@ -108,6 +108,10 @@ class OTelConfig(BaseSettings):
     enabled: bool = Field(default=False, description="Enable OpenTelemetry instrumentation")
     endpoint: str = Field(default="http://localhost:4317", description="OTLP exporter endpoint")
     service_name: str = Field(default="iceberg-explorer", description="Service name for traces")
+    insecure: bool = Field(
+        default=True,
+        description="Use insecure connection (no TLS) for OTLP exporter. Set to False for production.",
+    )
 
 
 class Settings(BaseSettings):

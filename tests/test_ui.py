@@ -174,8 +174,9 @@ class TestNamespaceChildrenPartial:
     def test_namespace_children_handles_empty_namespace(self, client: TestClient) -> None:
         """Namespace children shows empty state for non-existent namespace."""
         response = client.get("/ui/partials/namespace-children?parent=nonexistent")
+        assert response.status_code == 200
         content = response.text
-        assert "Empty namespace" in content or response.status_code == 200
+        assert "Empty namespace" in content
 
 
 class TestTableDetailsPartial:
@@ -197,7 +198,8 @@ class TestTableDetailsPartial:
         """Table details shows error when table doesn't exist."""
         response = client.get("/ui/partials/table-details?table_path=fake.missing_table")
         content = response.text
-        assert "Error" in content or "error" in content or response.status_code == 200
+        # Should either show an error message or return a non-200 status
+        assert ("Error" in content or "error" in content) or response.status_code != 200
 
 
 class TestResponsiveDesign:

@@ -58,6 +58,12 @@ def _format_value(value: object) -> str:
     return str(value)
 
 
+class CSVExportError(Exception):
+    """Error during CSV export streaming."""
+
+    pass
+
+
 async def _stream_csv(
     query_id: UUID,
     max_size_bytes: int,
@@ -70,12 +76,15 @@ async def _stream_csv(
 
     Yields:
         CSV data chunks.
+
+    Raises:
+        CSVExportError: If query times out, is cancelled, fails, or not found.
     """
     executor = get_executor()
     result = executor.get_status(query_id)
 
     if result is None:
-        return
+        raise CSVExportError(f"Query not found: {query_id}")
 
     max_wait_seconds = 3600
     waited = 0.0
@@ -83,13 +92,20 @@ async def _stream_csv(
         await asyncio.sleep(0.1)
         waited += 0.1
         if waited >= max_wait_seconds:
-            return
+            raise CSVExportError(
+                f"Query timed out after {max_wait_seconds} seconds waiting for completion"
+            )
         result = executor.get_status(query_id)
         if result is None:
-            return
+            raise CSVExportError(f"Query disappeared while waiting: {query_id}")
 
+    if result.state == QueryState.CANCELLED:
+        raise CSVExportError("Query was cancelled")
+    if result.state == QueryState.FAILED:
+        error_msg = result.error if hasattr(result, "error") and result.error else "Unknown error"
+        raise CSVExportError(f"Query failed: {error_msg}")
     if result.state != QueryState.COMPLETED:
-        return
+        raise CSVExportError(f"Query in unexpected state: {result.state}")
 
     schema = result.schema
     batches = result.batches
