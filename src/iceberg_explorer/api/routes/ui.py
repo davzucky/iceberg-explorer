@@ -216,6 +216,30 @@ async def table_details_partial(
                 """
                 columns = conn.execute(columns_sql, [table_name]).fetchall()
 
+                partition_columns: set[str] = set()
+                try:
+                    unquoted_path = f"{catalog_name}.{'.'.join(namespace_parts)}.{table_name}"
+                    metadata_sql = "SELECT * FROM iceberg_metadata(?) LIMIT 100"
+                    cur = conn.execute(metadata_sql, [unquoted_path])
+                    metadata_result = cur.fetchall()
+                    if metadata_result:
+                        description = cur.description
+                        if description:
+                            col_names = [col[0].lower() for col in description]
+                            if "partition_value" in col_names or "partition" in col_names:
+                                part_idx = (
+                                    col_names.index("partition_value")
+                                    if "partition_value" in col_names
+                                    else col_names.index("partition")
+                                )
+                                for row in metadata_result:
+                                    if row[part_idx]:
+                                        for part in str(row[part_idx]).split(","):
+                                            if "=" in part:
+                                                partition_columns.add(part.split("=")[0].strip())
+                except Exception as e:
+                    logger.debug("Failed to extract partition columns: %s", e)
+
                 snapshots = []
                 location = None
                 try:
@@ -256,17 +280,20 @@ async def table_details_partial(
                 except Exception as e:
                     logger.debug("Failed to fetch metadata: %s", e)
 
+                partition_column_list = sorted(partition_columns) if partition_columns else []
                 table_info = {
                     "namespace": namespace_parts,
                     "name": table_name,
                     "location": location
                     or f"s3://{catalog_name}/{'.'.join(namespace_parts)}/{table_name}",
                     "format": "ICEBERG",
+                    "partition_columns": partition_column_list,
                     "columns": [
                         {
                             "name": col[0],
                             "type": col[1],
                             "nullable": col[2].upper() == "YES" if col[2] else True,
+                            "is_partition": col[0] in partition_columns,
                         }
                         for col in columns
                     ],
