@@ -2,9 +2,13 @@
 
 Provides a connection manager that:
 - Connects to Iceberg catalogs (REST or local)
-- Enforces read-only mode
+- Enforces read-only query execution (via validate_sql in executor)
 - Applies memory and thread limits from configuration
 - Provides health check for catalog connectivity
+
+Note: Connection-level write access is required for setup operations
+(INSTALL, LOAD, ATTACH). User SQL is restricted to SELECT-only statements
+by validate_sql() in the query executor.
 """
 
 from __future__ import annotations
@@ -28,9 +32,13 @@ class DuckDBEngine:
 
     This class manages DuckDB connections with:
     - Iceberg extension loading and catalog attachment
-    - Read-only mode enforcement
+    - Read-only query execution enforcement (via validate_sql in executor)
     - Configurable memory limits and thread counts
     - Thread-safe connection handling
+
+    Note: Connection-level write access is required for setup operations
+    (INSTALL, LOAD, ATTACH). User SQL is restricted to SELECT-only statements
+    by validate_sql() in the query executor.
     """
 
     def __init__(self, settings: Settings | None = None) -> None:
@@ -125,6 +133,10 @@ class DuckDBEngine:
 
         This returns a cursor from the main connection, ensuring
         read-only operations are enforced.
+
+        The lock is held for the entire cursor lifecycle to prevent
+        concurrent cursor operations on the same DuckDB connection,
+        which is not thread-safe.
 
         Yields:
             DuckDB connection cursor for query execution.

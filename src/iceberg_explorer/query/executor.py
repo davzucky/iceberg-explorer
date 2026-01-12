@@ -15,6 +15,8 @@ import threading
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+import duckdb
+
 from iceberg_explorer.config import get_settings
 from iceberg_explorer.query.engine import get_engine
 from iceberg_explorer.query.models import (

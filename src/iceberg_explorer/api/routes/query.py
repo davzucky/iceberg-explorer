@@ -61,7 +61,7 @@ async def execute_query(
     executor = get_executor()
 
     try:
-        result = executor.execute(request.sql, timeout=request.timeout)
+        result = await asyncio.to_thread(executor.execute, request.sql, request.timeout)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -119,8 +119,15 @@ async def _stream_results(
         yield json.dumps(error) + "\n"
         return
 
+    max_wait_seconds = 3600  # 1 hour max wait
+    waited = 0.0
     while result.state == QueryState.RUNNING:
         await asyncio.sleep(0.1)
+        waited += 0.1
+        if waited >= max_wait_seconds:
+            error = {"type": "error", "error": "Timeout waiting for query completion"}
+            yield json.dumps(error) + "\n"
+            return
         result = executor.get_status(result_uuid)
         if result is None:
             error = {"type": "error", "error": "Query result was removed"}
