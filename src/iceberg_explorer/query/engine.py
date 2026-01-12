@@ -88,15 +88,19 @@ class DuckDBEngine:
 
         quoted_catalog_name = '"' + catalog_name.replace('"', '""') + '"'
         if catalog_config.type == CatalogType.REST:
+            # Quote the URI to prevent SQL injection (escape single quotes)
+            quoted_uri = "'" + catalog_config.uri.replace("'", "''") + "'"
             attach_sql = f"""
-                ATTACH '{catalog_config.uri}' AS {quoted_catalog_name} (
+                ATTACH {quoted_uri} AS {quoted_catalog_name} (
                     TYPE ICEBERG,
                     ENDPOINT_TYPE REST
                 )
             """
         else:
+            # Quote the warehouse path to prevent SQL injection (escape single quotes)
+            quoted_warehouse = "'" + catalog_config.warehouse.replace("'", "''") + "'"
             attach_sql = f"""
-                ATTACH '{catalog_config.warehouse}' AS {quoted_catalog_name} (
+                ATTACH {quoted_warehouse} AS {quoted_catalog_name} (
                     TYPE ICEBERG
                 )
             """
@@ -148,10 +152,10 @@ class DuckDBEngine:
         Raises:
             RuntimeError: If engine is not initialized.
         """
-        if self._connection is None:
-            raise RuntimeError("Engine not initialized. Call initialize() first.")
-
         with self._lock:
+            # Check inside lock to prevent race with close()
+            if self._connection is None:
+                raise RuntimeError("Engine not initialized. Call initialize() first.")
             cursor = self._connection.cursor()
             try:
                 yield cursor

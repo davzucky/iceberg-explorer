@@ -244,25 +244,23 @@ class QueryExecutor:
             result = self._active_queries.get(query_id)
             active_conn = self._active_conn.get(query_id)
 
-        if cancel_event is None or result is None:
-            return False
+            if cancel_event is None or result is None:
+                return False
 
-        if result.is_terminal:
-            return False
+            if result.is_terminal:
+                return False
 
-        cancel_event.set()
+            cancel_event.set()
 
-        if active_conn is not None:
-            try:
-                active_conn.interrupt()
-            except Exception:
-                pass
-            # Remove connection reference while holding lock to prevent race condition
-            with self._lock:
+            if active_conn is not None:
+                try:
+                    active_conn.interrupt()
+                except Exception:
+                    pass
                 self._active_conn.pop(query_id, None)
 
-        if result.state == QueryState.RUNNING:
-            result.set_cancelled()
+            if result.state == QueryState.RUNNING:
+                result.set_cancelled()
 
         return True
 

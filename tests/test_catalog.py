@@ -271,7 +271,7 @@ class TestListTablesEndpoint:
         """Test listing tables in a namespace."""
         mock_conn = MagicMock()
 
-        def mock_execute(sql):
+        def mock_execute(sql, params=None):
             result = MagicMock()
             if "LIMIT 1" in sql:
                 result.fetchall.return_value = [(1,)]
@@ -302,7 +302,7 @@ class TestListTablesEndpoint:
         """Test listing tables when namespace has no tables."""
         mock_conn = MagicMock()
 
-        def mock_execute(sql):
+        def mock_execute(sql, params=None):
             result = MagicMock()
             if "LIMIT 1" in sql:
                 result.fetchall.return_value = [(1,)]
@@ -325,7 +325,7 @@ class TestListTablesEndpoint:
         """Test listing tables in a nested namespace using unit separator."""
         mock_conn = MagicMock()
 
-        def mock_execute(sql):
+        def mock_execute(sql, params=None):
             result = MagicMock()
             if "LIMIT 1" in sql:
                 result.fetchall.return_value = [(1,)]
@@ -364,7 +364,7 @@ class TestListTablesEndpoint:
         """Test listing tables in a deeply nested namespace."""
         mock_conn = MagicMock()
 
-        def mock_execute(sql):
+        def mock_execute(sql, params=None):
             result = MagicMock()
             if "LIMIT 1" in sql:
                 result.fetchall.return_value = [(1,)]
@@ -390,7 +390,7 @@ class TestListTablesEndpoint:
         mock_engine.is_initialized = False
         mock_conn = MagicMock()
 
-        def mock_execute(sql):
+        def mock_execute(sql, params=None):
             result = MagicMock()
             if "LIMIT 1" in sql:
                 result.fetchall.return_value = [(1,)]
@@ -586,7 +586,7 @@ class TestTableDetailsEndpoint:
         """Test getting table details returns correct structure."""
         mock_conn = MagicMock()
 
-        def mock_execute(sql):
+        def mock_execute(sql, params=None):
             result = MagicMock()
             if "LIMIT 0" in sql:
                 result.fetchone.return_value = None
@@ -631,7 +631,7 @@ class TestTableDetailsEndpoint:
         """Test table details includes snapshot history."""
         mock_conn = MagicMock()
 
-        def mock_execute(sql):
+        def mock_execute(sql, params=None):
             result = MagicMock()
             if "LIMIT 0" in sql:
                 result.fetchone.return_value = None
@@ -673,7 +673,7 @@ class TestTableDetailsEndpoint:
         """Test table details with nested namespace using unit separator."""
         mock_conn = MagicMock()
 
-        def mock_execute(sql):
+        def mock_execute(sql, params=None):
             result = MagicMock()
             if "LIMIT 0" in sql:
                 result.fetchone.return_value = None
@@ -728,7 +728,7 @@ class TestTableDetailsEndpoint:
         mock_engine.is_initialized = False
         mock_conn = MagicMock()
 
-        def mock_execute(sql):
+        def mock_execute(sql, params=None):
             result = MagicMock()
             if "LIMIT 0" in sql:
                 result.fetchone.return_value = None
@@ -754,7 +754,7 @@ class TestTableDetailsEndpoint:
         """Test table details when no snapshots available."""
         mock_conn = MagicMock()
 
-        def mock_execute(sql):
+        def mock_execute(sql, params=None):
             result = MagicMock()
             if "LIMIT 0" in sql:
                 result.fetchone.return_value = None
@@ -917,7 +917,7 @@ class TestTableSchemaEndpoint:
         """Test getting table schema returns correct structure."""
         mock_conn = MagicMock()
 
-        def mock_execute(sql):
+        def mock_execute(sql, params=None):
             result = MagicMock()
             if "LIMIT 0" in sql:
                 result.fetchone.return_value = None
@@ -955,7 +955,7 @@ class TestTableSchemaEndpoint:
         """Test schema with various column types."""
         mock_conn = MagicMock()
 
-        def mock_execute(sql):
+        def mock_execute(sql, params=None):
             result = MagicMock()
             if "LIMIT 0" in sql:
                 result.fetchone.return_value = None
@@ -1006,7 +1006,7 @@ class TestTableSchemaEndpoint:
         """Test schema marks partition columns."""
         mock_conn = MagicMock()
 
-        def mock_execute(sql):
+        def mock_execute(sql, params=None):
             result = MagicMock()
             if "LIMIT 0" in sql:
                 result.fetchone.return_value = None
@@ -1047,7 +1047,7 @@ class TestTableSchemaEndpoint:
         """Test schema for table with nested namespace."""
         mock_conn = MagicMock()
 
-        def mock_execute(sql):
+        def mock_execute(sql, params=None):
             result = MagicMock()
             if "LIMIT 0" in sql:
                 result.fetchone.return_value = None
@@ -1105,7 +1105,7 @@ class TestTableSchemaEndpoint:
         mock_engine.is_initialized = False
         mock_conn = MagicMock()
 
-        def mock_execute(sql):
+        def mock_execute(sql, params=None):
             result = MagicMock()
             if "LIMIT 0" in sql:
                 result.fetchone.return_value = None
@@ -1132,7 +1132,7 @@ class TestTableSchemaEndpoint:
         """Test schema for table with no columns (edge case)."""
         mock_conn = MagicMock()
 
-        def mock_execute(sql):
+        def mock_execute(sql, params=None):
             result = MagicMock()
             if "LIMIT 0" in sql:
                 result.fetchone.return_value = None
@@ -1160,7 +1160,7 @@ class TestTableSchemaEndpoint:
         """Test nullable field detection for various is_nullable values."""
         mock_conn = MagicMock()
 
-        def mock_execute(sql):
+        def mock_execute(sql, params=None):
             result = MagicMock()
             if "LIMIT 0" in sql:
                 result.fetchone.return_value = None

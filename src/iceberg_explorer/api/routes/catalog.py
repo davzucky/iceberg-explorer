@@ -8,9 +8,12 @@ Provides endpoints for:
 
 from __future__ import annotations
 
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
+
+logger = logging.getLogger(__name__)
 
 from iceberg_explorer.models.catalog import (
     ColumnStatistics,
@@ -323,8 +326,8 @@ async def get_table_schema(
                                 for part in str(row[part_idx]).split(","):
                                     if "=" in part:
                                         partition_columns.add(part.split("=")[0].strip())
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to extract partition columns from metadata: %s", e)
 
         column_stats: dict[str, ColumnStatistics] = {}
 
@@ -428,8 +431,8 @@ async def get_table_details(
 
             if snapshots:
                 current_snapshot = max(snapshots, key=lambda s: s.sequence_number)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to fetch snapshots for table: %s", e)
 
         partition_spec: PartitionSpec | None = None
         sort_order: SortOrder | None = None
@@ -446,8 +449,8 @@ async def get_table_details(
                     path_parts = manifest_path.split("/metadata/")
                     if len(path_parts) > 1:
                         location = path_parts[0]
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to fetch metadata for table location: %s", e)
 
         if location is None:
             location = f"s3://{catalog_name}/{'.'.join(namespace_parts)}/{table_name}"

@@ -171,7 +171,7 @@ class TestExecuteQueryEndpoint:
             )
 
         assert response.status_code == 200
-        mock_executor.execute.assert_called_once_with("SELECT * FROM table1", timeout=60)
+        mock_executor.execute.assert_called_once_with("SELECT * FROM table1", 60)
 
     def test_execute_select_with_min_timeout(self, client: TestClient):
         """Test executing a SELECT query with minimum timeout."""
@@ -534,7 +534,7 @@ class TestExecuteQueryEndpoint:
             )
 
         assert response.status_code == 200
-        mock_executor.execute.assert_called_once_with("SELECT * FROM table1", timeout=None)
+        mock_executor.execute.assert_called_once_with("SELECT * FROM table1", None)
 
 
 class TestResultsStreamingModels:

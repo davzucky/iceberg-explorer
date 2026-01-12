@@ -63,7 +63,9 @@ class DuckDBConfig(BaseSettings):
     )
 
     memory_limit: str = Field(
-        default="4GB", description="DuckDB memory limit (e.g., '4GB', '512MB')"
+        default="4GB",
+        description="DuckDB memory limit (e.g., '4GB', '512MB')",
+        pattern=r"^\d+(KB|MB|GB|TB)$",
     )
     threads: int = Field(default=4, ge=1, description="Number of DuckDB threads")
 
