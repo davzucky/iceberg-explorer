@@ -154,7 +154,8 @@
           "id": "US-018",
           "title": "Query Results Table",
           "description": "Table view for query results.\n\n**What to do:**\n- Results displayed in scrollable table\n- Column headers clickable for sorting (Alpine.js)\n- Per-column filter inputs (text, numeric range)\n- Pagination controls (page size selector, prev/next)\n- Row count and execution time displayed\n- Streaming indicator during data fetch\n\n**Files:**\n- src/iceberg_explorer/templates/partials/results_table.html\n\n**Acceptance criteria:**\n- Verify in browser using dev-browser skill",
-          "dependsOn": ["US-017", "US-010"]
+          "dependsOn": ["US-017", "US-010"],
+          "passes": true
         },
         {
           "id": "US-019",
