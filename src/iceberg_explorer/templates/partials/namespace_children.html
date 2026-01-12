@@ -1,0 +1,81 @@
+<!-- Namespace children partial - renders child namespaces and tables -->
+<div class="space-y-1">
+    <!-- Child namespaces -->
+    {% for ns in namespaces %}
+    <div class="namespace-item" x-data="{ expanded: false }">
+        <button
+            class="flex w-full items-center rounded-md px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-100 group"
+            @click="expanded = !expanded"
+            hx-get="/ui/partials/namespace-children?parent={{ ns.encoded_path }}"
+            hx-target="#children-{{ ns.id }}"
+            hx-trigger="click once"
+            hx-swap="innerHTML"
+            hx-indicator="#loading-{{ ns.id }}"
+        >
+            <!-- Expand/collapse chevron -->
+            <svg
+                class="mr-1 h-4 w-4 text-gray-400 transition-transform duration-200 flex-shrink-0"
+                :class="{ 'rotate-90': expanded }"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+            >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
+            <!-- Folder icon -->
+            <svg class="mr-2 h-4 w-4 text-iceberg-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+            </svg>
+            <span class="truncate">{{ ns.name }}</span>
+            <!-- Loading indicator -->
+            <span id="loading-{{ ns.id }}" class="htmx-indicator ml-auto">
+                <svg class="animate-spin h-4 w-4 text-iceberg-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+            </span>
+        </button>
+        <!-- Nested children container -->
+        <div
+            x-show="expanded"
+            x-collapse
+            id="children-{{ ns.id }}"
+            class="ml-4 border-l border-gray-200 pl-2"
+        >
+            <div class="py-2 text-xs text-gray-400">Loading...</div>
+        </div>
+    </div>
+    {% endfor %}
+
+    <!-- Tables (leaf nodes) -->
+    {% for table in tables %}
+    <div class="table-item">
+        <button
+            class="flex w-full items-center rounded-md px-2 py-1.5 text-sm text-gray-700 hover:bg-iceberg-50 hover:text-iceberg-700 group"
+            hx-get="/ui/partials/table-details?table_path={{ table.table_path }}"
+            hx-target="#main-content"
+            hx-swap="innerHTML"
+            hx-indicator="#table-loading-{{ table.id }}"
+        >
+            <!-- Table icon -->
+            <svg class="mr-2 h-4 w-4 text-gray-400 group-hover:text-iceberg-500 flex-shrink-0 ml-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+            <span class="truncate">{{ table.name }}</span>
+            <!-- Loading indicator -->
+            <span id="table-loading-{{ table.id }}" class="htmx-indicator ml-auto">
+                <svg class="animate-spin h-4 w-4 text-iceberg-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+            </span>
+        </button>
+    </div>
+    {% endfor %}
+
+    {% if not namespaces and not tables %}
+    <div class="text-xs text-gray-400 italic py-1 pl-6">
+        Empty namespace
+    </div>
+    {% endif %}
+</div>

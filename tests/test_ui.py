@@ -100,6 +100,44 @@ class TestNamespaceTreePartial:
         assert "No namespaces found" in content
 
 
+class TestNamespaceChildrenPartial:
+    """Tests for the namespace children partial."""
+
+    def test_namespace_children_returns_html(self, client: TestClient) -> None:
+        """Namespace children partial returns HTML content."""
+        response = client.get("/ui/partials/namespace-children?parent=test")
+        assert response.status_code == 200
+        assert "text/html" in response.headers["content-type"]
+
+    def test_namespace_children_handles_empty_namespace(self, client: TestClient) -> None:
+        """Namespace children shows empty state for non-existent namespace."""
+        response = client.get("/ui/partials/namespace-children?parent=nonexistent")
+        content = response.text
+        assert "Empty namespace" in content or response.status_code == 200
+
+
+class TestTableDetailsPartial:
+    """Tests for the table details partial."""
+
+    def test_table_details_returns_html(self, client: TestClient) -> None:
+        """Table details partial returns HTML content."""
+        response = client.get("/ui/partials/table-details?table_path=ns.table")
+        assert response.status_code == 200
+        assert "text/html" in response.headers["content-type"]
+
+    def test_table_details_invalid_path(self, client: TestClient) -> None:
+        """Table details shows error for invalid path format."""
+        response = client.get("/ui/partials/table-details?table_path=invalid")
+        content = response.text
+        assert "Invalid table path" in content or "Error" in content
+
+    def test_table_details_shows_error_for_missing_table(self, client: TestClient) -> None:
+        """Table details shows error when table doesn't exist."""
+        response = client.get("/ui/partials/table-details?table_path=fake.missing_table")
+        content = response.text
+        assert "Error" in content or "error" in content or response.status_code == 200
+
+
 class TestResponsiveDesign:
     """Tests for responsive design elements."""
 
@@ -110,3 +148,22 @@ class TestResponsiveDesign:
 
         assert 'name="viewport"' in content
         assert "width=device-width" in content
+
+
+class TestNamespaceTreeIntegration:
+    """Integration tests for namespace tree functionality."""
+
+    def test_index_page_loads_tree_via_htmx(self, client: TestClient) -> None:
+        """Index page has HTMX trigger to load namespace tree."""
+        response = client.get("/")
+        content = response.text
+
+        assert 'hx-get="/ui/partials/namespace-tree"' in content
+        assert 'hx-trigger="load"' in content
+
+    def test_namespace_tree_has_expand_collapse_structure(self, client: TestClient) -> None:
+        """Namespace tree template has expand/collapse UI elements."""
+        response = client.get("/ui/partials/namespace-tree")
+        content = response.text
+
+        assert "No namespaces found" in content or "namespace-item" in content

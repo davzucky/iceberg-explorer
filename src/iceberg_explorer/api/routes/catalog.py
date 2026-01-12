@@ -13,8 +13,6 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
 
-logger = logging.getLogger(__name__)
-
 from iceberg_explorer.models.catalog import (
     ColumnStatistics,
     ListNamespacesResponse,
@@ -28,6 +26,8 @@ from iceberg_explorer.models.catalog import (
     TableSchemaResponse,
 )
 from iceberg_explorer.query.engine import get_engine
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/catalog", tags=["catalog"])
 
@@ -138,7 +138,11 @@ async def list_namespaces(
                     detail=f"Namespace not found: {'.'.join(parent_parts)}",
                 ) from e
 
-        schema_path = _build_namespace_path(catalog_name, parent_parts) if parent_parts else _quote_identifier(catalog_name)
+        schema_path = (
+            _build_namespace_path(catalog_name, parent_parts)
+            if parent_parts
+            else _quote_identifier(catalog_name)
+        )
         sql = f"SELECT schema_name FROM {schema_path}.information_schema.schemata"
 
         try:
@@ -216,9 +220,7 @@ async def list_tables(
         identifiers: list[TableIdentifier] = []
         for row in result:
             table_name = row[0]
-            identifiers.append(
-                TableIdentifier(namespace=namespace_parts, name=table_name)
-            )
+            identifiers.append(TableIdentifier(namespace=namespace_parts, name=table_name))
 
     return ListTablesResponse(identifiers=identifiers)
 
@@ -320,7 +322,11 @@ async def get_table_schema(
                 if description:
                     col_names = [col[0].lower() for col in description]
                     if "partition_value" in col_names or "partition" in col_names:
-                        part_idx = col_names.index("partition_value") if "partition_value" in col_names else col_names.index("partition")
+                        part_idx = (
+                            col_names.index("partition_value")
+                            if "partition_value" in col_names
+                            else col_names.index("partition")
+                        )
                         for row in metadata_result:
                             if row[part_idx]:
                                 for part in str(row[part_idx]).split(","):
