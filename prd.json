@@ -140,13 +140,15 @@
           "id": "US-016",
           "title": "Table Details View",
           "description": "Main panel view for table details.\n\n**What to do:**\n- Main panel shows selected table metadata\n- Tabs for: Overview, Schema, Snapshots\n- Overview: location, format, partitioning, current snapshot\n- Schema: searchable column list with type badges\n- Snapshots: list with timestamps\n- HTMX partial updates when switching tabs\n\n**Files:**\n- src/iceberg_explorer/templates/partials/table_details.html\n\n**Acceptance criteria:**\n- Verify in browser using dev-browser skill",
-          "dependsOn": ["US-015", "US-008"]
+          "dependsOn": ["US-015", "US-008"],
+          "passes": true
         },
         {
           "id": "US-017",
           "title": "SQL Query Editor",
           "description": "SQL editor for writing and executing queries.\n\n**What to do:**\n- Monaco editor with SQL syntax highlighting\n- Run button executes query via HTMX\n- Timeout selector (dropdown: 30s, 60s, 5m, 15m, 1h)\n- Cancel button visible during execution\n- Error messages displayed clearly\n\n**Files:**\n- src/iceberg_explorer/templates/query.html\n\n**Acceptance criteria:**\n- Verify in browser using dev-browser skill",
-          "dependsOn": ["US-014", "US-009"]
+          "dependsOn": ["US-014", "US-009"],
+          "passes": true
         },
         {
           "id": "US-018",

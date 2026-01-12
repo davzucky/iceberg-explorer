@@ -344,3 +344,48 @@ Thread: https://ampcode.com/threads/T-019bb19a-1af0-72dc-b67b-df40b5854f70
   - Alpine.js x-collapse directive works well with HTMX for smooth expand/collapse
   - Table path format in UI: URL-encode namespace parts, then append .tablename
 ---
+
+## 2026-01-12 - US-016
+Thread: https://ampcode.com/threads/T-019bb1a0-584c-778d-a443-8ea366cae220
+- What was implemented:
+  - Enhanced table details view with partitioning information in Overview tab
+  - Added searchable column list in Schema tab with Alpine.js filtering
+  - Added partition column badges in Schema tab
+  - Extracted partition column information from iceberg_metadata()
+  - All features use Alpine.js for client-side interactivity (no additional HTMX calls needed)
+- Files changed:
+  - src/iceberg_explorer/api/routes/ui.py (updated - fetch partition columns from metadata)
+  - src/iceberg_explorer/templates/partials/table_details.html (updated - partitioning display, search, badges)
+- **Learnings for future iterations:**
+  - Extract partition columns from iceberg_metadata() partition_value column
+  - Alpine.js x-data can be nested within elements for scoped state (searchQuery in Schema tab)
+  - Use x-show with template interpolation for filtering: `x-show="!searchQuery || '{{ col.name }}'.toLowerCase().includes(searchQuery.toLowerCase())"`
+  - Partition columns displayed with purple badges for visual distinction from type badges (blue)
+---
+
+## 2026-01-12 - US-017
+Thread: https://ampcode.com/threads/T-019bb1a5-c408-71d9-90aa-fcf801eb7cbb
+- What was implemented:
+  - SQL Query Editor with Monaco editor integration (SQL syntax highlighting)
+  - Run Query button that executes queries via fetch API to /api/v1/query/execute
+  - Timeout selector dropdown with options: 30s, 60s, 5m, 15m, 1h
+  - Cancel button that appears during execution and calls /api/v1/query/{id}/cancel
+  - Error message display with red alert box and dismiss button
+  - Status display showing current query state during execution
+  - Keyboard shortcut: Ctrl/Cmd + Enter to run query
+  - Result summary showing row count and execution duration
+  - Alpine.js component (queryEditor) for state management
+  - Status polling for running queries via /api/v1/query/{id}/status
+  - Streaming result consumption via /api/v1/query/{id}/results
+  - 8 new UI tests (25 total UI tests, 274 overall)
+- Files changed:
+  - src/iceberg_explorer/templates/query.html (updated - full implementation)
+  - tests/test_ui.py (updated - added 8 new tests for query editor)
+- **Learnings for future iterations:**
+  - Monaco editor loaded via CDN using require.config and dynamic import
+  - Use fetch API with async/await for API calls in Alpine.js components
+  - Poll for status updates with setInterval, stop on terminal states (completed, failed, cancelled)
+  - Stream NDJSON results with ReadableStream API and TextDecoder
+  - x-cloak attribute hides elements until Alpine.js initializes them
+  - Use :disabled binding to disable form elements during execution
+---
