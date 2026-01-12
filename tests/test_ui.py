@@ -1,0 +1,112 @@
+"""Tests for web UI routes."""
+
+import pytest
+from fastapi.testclient import TestClient
+
+from iceberg_explorer.main import app
+
+
+@pytest.fixture
+def client() -> TestClient:
+    """Create test client."""
+    return TestClient(app)
+
+
+class TestIndexPage:
+    """Tests for the index page."""
+
+    def test_index_returns_html(self, client: TestClient) -> None:
+        """Index page returns HTML content."""
+        response = client.get("/")
+        assert response.status_code == 200
+        assert "text/html" in response.headers["content-type"]
+
+    def test_index_contains_base_elements(self, client: TestClient) -> None:
+        """Index page contains expected base layout elements."""
+        response = client.get("/")
+        content = response.text
+
+        assert "Iceberg Explorer" in content
+        assert "<!DOCTYPE html>" in content
+        assert "htmx.org" in content
+        assert "alpinejs" in content
+        assert "tailwindcss" in content.lower() or "tailwind" in content.lower()
+
+    def test_index_has_navigation(self, client: TestClient) -> None:
+        """Index page has navigation links."""
+        response = client.get("/")
+        content = response.text
+
+        assert 'href="/"' in content
+        assert 'href="/query"' in content
+        assert "Catalog" in content
+        assert "Query" in content
+
+    def test_index_has_sidebar(self, client: TestClient) -> None:
+        """Index page has sidebar for namespaces."""
+        response = client.get("/")
+        content = response.text
+
+        assert "Namespaces" in content
+        assert "sidebar" in content.lower()
+
+
+class TestQueryPage:
+    """Tests for the query page."""
+
+    def test_query_page_returns_html(self, client: TestClient) -> None:
+        """Query page returns HTML content."""
+        response = client.get("/query")
+        assert response.status_code == 200
+        assert "text/html" in response.headers["content-type"]
+
+    def test_query_page_contains_base_elements(self, client: TestClient) -> None:
+        """Query page contains expected base layout elements."""
+        response = client.get("/query")
+        content = response.text
+
+        assert "Iceberg Explorer" in content
+        assert "<!DOCTYPE html>" in content
+
+    def test_query_page_has_editor_placeholder(self, client: TestClient) -> None:
+        """Query page has SQL editor placeholder."""
+        response = client.get("/query")
+        content = response.text
+
+        assert "SQL Query Editor" in content
+
+    def test_query_page_has_results_placeholder(self, client: TestClient) -> None:
+        """Query page has results placeholder."""
+        response = client.get("/query")
+        content = response.text
+
+        assert "Results" in content
+
+
+class TestNamespaceTreePartial:
+    """Tests for the namespace tree partial."""
+
+    def test_namespace_tree_returns_html(self, client: TestClient) -> None:
+        """Namespace tree partial returns HTML content."""
+        response = client.get("/ui/partials/namespace-tree")
+        assert response.status_code == 200
+        assert "text/html" in response.headers["content-type"]
+
+    def test_namespace_tree_empty_state(self, client: TestClient) -> None:
+        """Namespace tree shows empty state when no namespaces."""
+        response = client.get("/ui/partials/namespace-tree")
+        content = response.text
+
+        assert "No namespaces found" in content
+
+
+class TestResponsiveDesign:
+    """Tests for responsive design elements."""
+
+    def test_has_viewport_meta(self, client: TestClient) -> None:
+        """Pages have viewport meta tag for responsive design."""
+        response = client.get("/")
+        content = response.text
+
+        assert 'name="viewport"' in content
+        assert "width=device-width" in content

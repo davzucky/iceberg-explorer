@@ -1,0 +1,43 @@
+<!-- Namespace tree partial - placeholder for US-015 -->
+<div class="space-y-1" x-data="{ expanded: {} }">
+    {% if namespaces %}
+        {% for ns in namespaces %}
+        <div class="namespace-item">
+            <button
+                class="flex w-full items-center rounded-md px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-100"
+                @click="expanded['{{ ns.path }}'] = !expanded['{{ ns.path }}']"
+                hx-get="/ui/partials/namespace-children?parent={{ ns.encoded_path }}"
+                hx-target="#children-{{ ns.id }}"
+                hx-trigger="click once"
+                hx-swap="innerHTML"
+            >
+                <svg
+                    class="mr-2 h-4 w-4 text-gray-400 transition-transform"
+                    :class="{ 'rotate-90': expanded['{{ ns.path }}'] }"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                >
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                </svg>
+                <svg class="mr-2 h-4 w-4 text-iceberg-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                </svg>
+                <span>{{ ns.name }}</span>
+            </button>
+            <div
+                x-show="expanded['{{ ns.path }}']"
+                x-collapse
+                id="children-{{ ns.id }}"
+                class="ml-4 border-l border-gray-200 pl-2"
+            >
+                <!-- Children loaded via HTMX -->
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="text-sm text-gray-500 italic">
+            No namespaces found
+        </div>
+    {% endif %}
+</div>

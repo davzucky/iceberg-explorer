@@ -6,6 +6,7 @@ from iceberg_explorer import __version__
 from iceberg_explorer.api.routes.catalog import router as catalog_router
 from iceberg_explorer.api.routes.health import router as health_router
 from iceberg_explorer.api.routes.query import router as query_router
+from iceberg_explorer.api.routes.ui import router as ui_router
 
 app = FastAPI(
     title="Iceberg Explorer",
@@ -16,12 +17,7 @@ app = FastAPI(
 app.include_router(catalog_router)
 app.include_router(health_router)
 app.include_router(query_router)
-
-
-@app.get("/")
-async def root() -> dict[str, str]:
-    """Root endpoint."""
-    return {"message": "Iceberg Explorer"}
+app.include_router(ui_router)
 
 
 def main() -> None:
