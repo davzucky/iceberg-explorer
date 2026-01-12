@@ -431,3 +431,23 @@ Thread: https://ampcode.com/threads/T-019bb1d5-dc7d-747c-86bd-c5308f1c4684
   - Streaming CSV uses io.StringIO buffer with periodic flushing at 8KB to avoid memory issues
   - ExportConfig follows same pattern as other config classes (pydantic-settings with env prefix)
 ---
+
+## 2026-01-12 - US-019
+Thread: https://ampcode.com/threads/T-019bb1dc-3f41-7265-9ac7-a72115f28722
+- What was implemented:
+  - Export CSV button in results toolbar next to Results header
+  - Button only visible when columns.length > 0 && queryId (after successful query)
+  - Loading spinner and "Exporting..." text during export
+  - Disabled when isExporting, isExecuting, or isStreaming
+  - Downloads file with appropriate name extracted from Content-Disposition header
+  - Uses POST /api/v1/export/csv with query_id from executed query
+  - Uses Blob API and dynamic anchor element for file download
+- Files changed:
+  - src/iceberg_explorer/templates/query.html (updated - added isExporting state, Export CSV button, exportCSV function)
+  - .gitignore (updated - excluded dev-browser artifacts)
+- **Learnings for future iterations:**
+  - Use x-show and x-cloak for conditional button visibility with Alpine.js
+  - File download with fetch: create blob, create object URL, create anchor, click, cleanup
+  - Get filename from Content-Disposition header with regex: /filename="?([^"]+)"?/
+  - Browser automation timeouts may occur when loading heavy CDN resources like Monaco editor
+---

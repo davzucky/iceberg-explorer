@@ -162,7 +162,8 @@
           "id": "US-019",
           "title": "CSV Export Button",
           "description": "Export button for downloading results as CSV.\n\n**Priority Note:** Lower priority, depends on US-013.\n\n**What to do:**\n- Export button in results toolbar\n- Shows progress for large exports\n- Downloads file with appropriate name\n- Disabled when no results available\n\n**Acceptance criteria:**\n- Verify in browser using dev-browser skill",
-          "dependsOn": ["US-018", "US-013"]
+          "dependsOn": ["US-018", "US-013"],
+          "passes": true
         }
       ]
     },
