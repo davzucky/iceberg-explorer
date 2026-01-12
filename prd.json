@@ -133,7 +133,8 @@
           "id": "US-015",
           "title": "Namespace Tree Browser",
           "description": "Sidebar namespace tree view for browsing.\n\n**What to do:**\n- Sidebar shows namespace tree\n- Click namespace to expand/collapse (lazy load via HTMX)\n- Tables shown as leaf nodes under namespaces\n- Click table to load details in main panel\n- Loading indicator during fetch\n\n**Files:**\n- src/iceberg_explorer/templates/partials/namespace_tree.html\n- src/iceberg_explorer/templates/catalog.html\n\n**Acceptance criteria:**\n- Verify in browser using dev-browser skill",
-          "dependsOn": ["US-014"]
+          "dependsOn": ["US-014"],
+          "passes": true
         },
         {
           "id": "US-016",

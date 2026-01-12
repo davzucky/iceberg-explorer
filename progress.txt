@@ -18,6 +18,8 @@
 - UI routes serve HTML via Jinja2Templates(directory=TEMPLATES_DIR) with request as first arg
 - Use HTMX for dynamic content loading, Alpine.js for client-side state (e.g., sidebar toggle)
 - Tailwind CSS via CDN for styling with custom `iceberg` color palette
+- UI partials use `hx-indicator` for inline loading spinners; templates use Alpine.js x-data for local state
+- Use `_encode_namespace()` to URL-encode namespace paths; `_generate_id()` for stable HTML element IDs
 
 ---
 
@@ -316,4 +318,29 @@ Thread: https://ampcode.com/threads/T-019bb192-0f9e-7085-bc27-fffb33395133
   - HTMX htmx-indicator class needs opacity transition CSS for smooth loading states
   - Avoid global loading overlays that block clicks - use inline indicators instead
   - Base template uses {% block %} pattern for extensible layouts
+---
+
+## 2026-01-12 - US-015
+Thread: https://ampcode.com/threads/T-019bb19a-1af0-72dc-b67b-df40b5854f70
+- What was implemented:
+  - Sidebar namespace tree with expand/collapse functionality
+  - HTMX lazy loading for child namespaces via /ui/partials/namespace-children endpoint
+  - Tables shown as leaf nodes under namespaces with table icon
+  - Click table to load details in main panel via /ui/partials/table-details endpoint
+  - Loading indicators during fetch (inline spinners with hx-indicator)
+  - Table details view with tabs: Overview, Schema, Snapshots
+  - Updated ui.py with 3 new endpoints: namespace_tree_partial, namespace_children_partial, table_details_partial
+  - 7 new tests (18 UI tests total, 267 overall)
+- Files changed:
+  - src/iceberg_explorer/api/routes/ui.py (updated - added namespace tree and table details endpoints)
+  - src/iceberg_explorer/api/routes/catalog.py (updated - fixed import order)
+  - src/iceberg_explorer/templates/partials/namespace_tree.html (updated - full implementation)
+  - src/iceberg_explorer/templates/partials/namespace_children.html (new)
+  - src/iceberg_explorer/templates/partials/table_details.html (new)
+  - tests/test_ui.py (updated - new tests for namespace children and table details)
+- **Learnings for future iterations:**
+  - Use hashlib.md5 with usedforsecurity=False for generating stable element IDs
+  - HTMX hx-trigger="click once" prevents re-fetching on subsequent clicks
+  - Alpine.js x-collapse directive works well with HTMX for smooth expand/collapse
+  - Table path format in UI: URL-encode namespace parts, then append .tablename
 ---
