@@ -389,3 +389,24 @@ Thread: https://ampcode.com/threads/T-019bb1a5-c408-71d9-90aa-fcf801eb7cbb
   - x-cloak attribute hides elements until Alpine.js initializes them
   - Use :disabled binding to disable form elements during execution
 ---
+
+## 2026-01-12 - US-018
+Thread: https://ampcode.com/threads/T-019bb1ce-79bf-77cb-9dab-1ef0272e87ac
+- What was implemented:
+  - Scrollable results table with sticky headers (max-height 500px)
+  - Clickable column headers for sorting with Alpine.js (toggleSort, applySort functions)
+  - Per-column filter inputs with text and numeric range support (>, <, >=, <=)
+  - Pagination controls with page size selector (100, 250, 500, 1000) and prev/next buttons
+  - Row count and execution time displayed in results summary
+  - Streaming indicator during data fetch with row count progress
+  - Client-side filtering with applyFilters() function
+  - NULL value display and formatting for various data types
+- Files changed:
+  - src/iceberg_explorer/templates/query.html (updated - added results table, sorting, filtering, pagination)
+  - prd.json (updated - marked US-018 passes: true)
+- **Learnings for future iterations:**
+  - Results table uses CSS position: sticky for headers during scroll
+  - Alpine.js computed properties (get paginatedRows, get totalPages) for reactive pagination
+  - Numeric range filters use regex matching for operators (>, <, >=, <=)
+  - formatCell() helper handles null, boolean, and object formatting
+---
