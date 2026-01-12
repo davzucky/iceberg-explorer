@@ -14,6 +14,10 @@
 - FastAPI routes with :path parameter: declare more specific routes (e.g., /tables/{path}/schema) before general ones (e.g., /tables/{path})
 - API models in `models/` package (Pydantic), internal models in `query/models.py` (dataclasses)
 - Query API: POST /api/v1/query/execute to execute, returns query_id for tracking
+- Templates in `templates/` use Jinja2 with `{% block %}` inheritance; partials in `templates/partials/`
+- UI routes serve HTML via Jinja2Templates(directory=TEMPLATES_DIR) with request as first arg
+- Use HTMX for dynamic content loading, Alpine.js for client-side state (e.g., sidebar toggle)
+- Tailwind CSS via CDN for styling with custom `iceberg` color palette
 
 ---
 
@@ -283,4 +287,33 @@ Thread: https://ampcode.com/threads/T-019bab3b-5c4a-72f9-91e4-c22e62efa689
   - Reuse engine.health_check() which returns dict with healthy, duckdb, catalog, error keys
   - FastAPI Response parameter allows setting status_code dynamically
   - Use 503 for unhealthy/not ready responses per HTTP conventions
+---
+
+## 2026-01-12 - US-014
+Thread: https://ampcode.com/threads/T-019bb192-0f9e-7085-bc27-fffb33395133
+- What was implemented:
+  - Base HTML template (base.html) with header, collapsible sidebar, main content area
+  - Header with Iceberg Explorer logo, navigation links (Catalog, Query), health status indicator
+  - Sidebar with Namespaces title and placeholder for namespace tree (lazy-loads via HTMX)
+  - Tailwind CSS via CDN with custom iceberg color palette
+  - HTMX 2.0.4 for dynamic updates
+  - Alpine.js 3.14.3 for client-side interactivity (sidebar toggle)
+  - Responsive design with viewport meta tag
+  - UI routes: GET / (index), GET /query (query page), GET /ui/partials/namespace-tree
+  - Jinja2 templating with block inheritance pattern
+  - 11 new tests (260 total)
+- Files changed:
+  - src/iceberg_explorer/templates/base.html (new)
+  - src/iceberg_explorer/templates/index.html (new)
+  - src/iceberg_explorer/templates/query.html (new)
+  - src/iceberg_explorer/templates/partials/namespace_tree.html (new)
+  - src/iceberg_explorer/api/routes/ui.py (new)
+  - src/iceberg_explorer/main.py (updated - added ui_router)
+  - tests/test_ui.py (new)
+- **Learnings for future iterations:**
+  - Use Jinja2Templates with request as first argument for FastAPI template responses
+  - Alpine.js x-data and @click work well for toggle state (sidebarOpen)
+  - HTMX htmx-indicator class needs opacity transition CSS for smooth loading states
+  - Avoid global loading overlays that block clicks - use inline indicators instead
+  - Base template uses {% block %} pattern for extensible layouts
 ---

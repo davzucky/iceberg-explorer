@@ -126,7 +126,8 @@
           "id": "US-014",
           "title": "Base Layout and Navigation",
           "description": "Create clean UI layout for application navigation.\n\n**What to do:**\n- Base HTML template with header, sidebar, main content\n- Tailwind CSS for styling (compiled, not CDN in prod)\n- HTMX loaded for dynamic updates\n- Alpine.js loaded for client-side interactivity\n- Responsive design (works on tablet+)\n\n**Files:**\n- src/iceberg_explorer/templates/base.html\n- static/css/\n- static/js/\n\n**Acceptance criteria:**\n- Verify in browser using dev-browser skill\n- `uv run ruff check src/` passes",
-          "dependsOn": ["US-005"]
+          "dependsOn": ["US-005"],
+          "passes": true
         },
         {
           "id": "US-015",
