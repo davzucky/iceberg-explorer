@@ -13,8 +13,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
 
-logger = logging.getLogger(__name__)
-
+from iceberg_explorer.api.routes.utils import (
+    _build_namespace_path,
+    _parse_namespace,
+    _quote_identifier,
+)
 from iceberg_explorer.models.catalog import (
     ColumnStatistics,
     ListNamespacesResponse,
@@ -29,52 +32,9 @@ from iceberg_explorer.models.catalog import (
 )
 from iceberg_explorer.query.engine import get_engine
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/v1/catalog", tags=["catalog"])
-
-UNIT_SEPARATOR = "\x1f"
-
-
-def _parse_namespace(namespace_str: str | None) -> list[str]:
-    """Parse a namespace string into its components.
-
-    Args:
-        namespace_str: Namespace string with unit separator (\\x1f) delimiter,
-                      or None for top-level.
-
-    Returns:
-        List of namespace components.
-    """
-    if not namespace_str:
-        return []
-    return namespace_str.split(UNIT_SEPARATOR)
-
-
-def _quote_identifier(identifier: str) -> str:
-    """Quote an identifier for use in SQL.
-
-    Args:
-        identifier: The identifier to quote.
-
-    Returns:
-        Quoted identifier safe for SQL.
-    """
-    escaped = identifier.replace('"', '""')
-    return f'"{escaped}"'
-
-
-def _build_namespace_path(catalog_name: str, namespace: list[str]) -> str:
-    """Build a fully qualified namespace path for SQL.
-
-    Args:
-        catalog_name: The catalog name.
-        namespace: List of namespace components.
-
-    Returns:
-        Fully qualified path like catalog.ns1.ns2
-    """
-    parts = [_quote_identifier(catalog_name)]
-    parts.extend(_quote_identifier(ns) for ns in namespace)
-    return ".".join(parts)
 
 
 @router.get("/namespaces", response_model=ListNamespacesResponse)
@@ -138,7 +98,11 @@ async def list_namespaces(
                     detail=f"Namespace not found: {'.'.join(parent_parts)}",
                 ) from e
 
-        schema_path = _build_namespace_path(catalog_name, parent_parts) if parent_parts else _quote_identifier(catalog_name)
+        schema_path = (
+            _build_namespace_path(catalog_name, parent_parts)
+            if parent_parts
+            else _quote_identifier(catalog_name)
+        )
         sql = f"SELECT schema_name FROM {schema_path}.information_schema.schemata"
 
         try:
@@ -216,9 +180,7 @@ async def list_tables(
         identifiers: list[TableIdentifier] = []
         for row in result:
             table_name = row[0]
-            identifiers.append(
-                TableIdentifier(namespace=namespace_parts, name=table_name)
-            )
+            identifiers.append(TableIdentifier(namespace=namespace_parts, name=table_name))
 
     return ListTablesResponse(identifiers=identifiers)
 
@@ -320,7 +282,11 @@ async def get_table_schema(
                 if description:
                     col_names = [col[0].lower() for col in description]
                     if "partition_value" in col_names or "partition" in col_names:
-                        part_idx = col_names.index("partition_value") if "partition_value" in col_names else col_names.index("partition")
+                        part_idx = (
+                            col_names.index("partition_value")
+                            if "partition_value" in col_names
+                            else col_names.index("partition")
+                        )
                         for row in metadata_result:
                             if row[part_idx]:
                                 for part in str(row[part_idx]).split(","):

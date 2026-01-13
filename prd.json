@@ -115,7 +115,8 @@
           "id": "US-013",
           "title": "CSV Export Endpoint",
           "description": "API endpoint to export query results to CSV.\n\n**Priority Note:** Lower priority, implement after core functionality.\n\n**What to do:**\n- `POST /api/v1/export/csv` accepts query_id or inline SQL\n- Stream CSV as chunked download\n- Configurable max size (default 1GB)\n- Proper Content-Disposition header with filename\n- Handle large exports without memory issues\n\n**Files:**\n- src/iceberg_explorer/api/routes/export.py\n\n**Acceptance criteria:**\n- Integration test with various data types\n- `uv run pytest` passes",
-          "dependsOn": ["US-010"]
+          "dependsOn": ["US-010"],
+          "passes": true
         }
       ]
     },
@@ -126,37 +127,43 @@
           "id": "US-014",
           "title": "Base Layout and Navigation",
           "description": "Create clean UI layout for application navigation.\n\n**What to do:**\n- Base HTML template with header, sidebar, main content\n- Tailwind CSS for styling (compiled, not CDN in prod)\n- HTMX loaded for dynamic updates\n- Alpine.js loaded for client-side interactivity\n- Responsive design (works on tablet+)\n\n**Files:**\n- src/iceberg_explorer/templates/base.html\n- static/css/\n- static/js/\n\n**Acceptance criteria:**\n- Verify in browser using dev-browser skill\n- `uv run ruff check src/` passes",
-          "dependsOn": ["US-005"]
+          "dependsOn": ["US-005"],
+          "passes": true
         },
         {
           "id": "US-015",
           "title": "Namespace Tree Browser",
           "description": "Sidebar namespace tree view for browsing.\n\n**What to do:**\n- Sidebar shows namespace tree\n- Click namespace to expand/collapse (lazy load via HTMX)\n- Tables shown as leaf nodes under namespaces\n- Click table to load details in main panel\n- Loading indicator during fetch\n\n**Files:**\n- src/iceberg_explorer/templates/partials/namespace_tree.html\n- src/iceberg_explorer/templates/catalog.html\n\n**Acceptance criteria:**\n- Verify in browser using dev-browser skill",
-          "dependsOn": ["US-014"]
+          "dependsOn": ["US-014"],
+          "passes": true
         },
         {
           "id": "US-016",
           "title": "Table Details View",
           "description": "Main panel view for table details.\n\n**What to do:**\n- Main panel shows selected table metadata\n- Tabs for: Overview, Schema, Snapshots\n- Overview: location, format, partitioning, current snapshot\n- Schema: searchable column list with type badges\n- Snapshots: list with timestamps\n- HTMX partial updates when switching tabs\n\n**Files:**\n- src/iceberg_explorer/templates/partials/table_details.html\n\n**Acceptance criteria:**\n- Verify in browser using dev-browser skill",
-          "dependsOn": ["US-015", "US-008"]
+          "dependsOn": ["US-015", "US-008"],
+          "passes": true
         },
         {
           "id": "US-017",
           "title": "SQL Query Editor",
           "description": "SQL editor for writing and executing queries.\n\n**What to do:**\n- Monaco editor with SQL syntax highlighting\n- Run button executes query via HTMX\n- Timeout selector (dropdown: 30s, 60s, 5m, 15m, 1h)\n- Cancel button visible during execution\n- Error messages displayed clearly\n\n**Files:**\n- src/iceberg_explorer/templates/query.html\n\n**Acceptance criteria:**\n- Verify in browser using dev-browser skill",
-          "dependsOn": ["US-014", "US-009"]
+          "dependsOn": ["US-014", "US-009"],
+          "passes": true
         },
         {
           "id": "US-018",
           "title": "Query Results Table",
           "description": "Table view for query results.\n\n**What to do:**\n- Results displayed in scrollable table\n- Column headers clickable for sorting (Alpine.js)\n- Per-column filter inputs (text, numeric range)\n- Pagination controls (page size selector, prev/next)\n- Row count and execution time displayed\n- Streaming indicator during data fetch\n\n**Files:**\n- src/iceberg_explorer/templates/partials/results_table.html\n\n**Acceptance criteria:**\n- Verify in browser using dev-browser skill",
-          "dependsOn": ["US-017", "US-010"]
+          "dependsOn": ["US-017", "US-010"],
+          "passes": true
         },
         {
           "id": "US-019",
           "title": "CSV Export Button",
           "description": "Export button for downloading results as CSV.\n\n**Priority Note:** Lower priority, depends on US-013.\n\n**What to do:**\n- Export button in results toolbar\n- Shows progress for large exports\n- Downloads file with appropriate name\n- Disabled when no results available\n\n**Acceptance criteria:**\n- Verify in browser using dev-browser skill",
-          "dependsOn": ["US-018", "US-013"]
+          "dependsOn": ["US-018", "US-013"],
+          "passes": true
         }
       ]
     },
@@ -174,7 +181,8 @@
           "id": "US-021",
           "title": "OpenTelemetry Instrumentation",
           "description": "Observability via OpenTelemetry.\n\n**What to do:**\n- OpenTelemetry SDK integrated with auto-instrumentation\n- FastAPI routes automatically traced\n- DuckDB query spans with duration and row count attributes\n- Metrics: `query_duration_seconds`, `query_rows_returned`, `active_queries`\n- Configurable OTLP exporter endpoint\n- Service name set to `iceberg-explorer`\n- Structured JSON logs with trace context (trace_id, span_id)\n- No sensitive data in logs (no SQL content by default)\n\n**Acceptance criteria:**\n- Integration test verifying traces and metrics are emitted\n- `uv run pytest` passes",
-          "dependsOn": ["US-020"]
+          "dependsOn": ["US-020"],
+          "passes": true
         }
       ]
     }

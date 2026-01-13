@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-gray-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Iceberg Explorer{% endblock %}</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        iceberg: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            200: '#bae6fd',
+                            300: '#7dd3fc',
+                            400: '#38bdf8',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            700: '#0369a1',
+                            800: '#075985',
+                            900: '#0c4a6e',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@2.0.7"></script>
+
+    <!-- Alpine.js -->
+    <script defer src="https://unpkg.com/alpinejs@3.15.3/dist/cdn.min.js"></script>
+
+    <!-- Custom styles -->
+    <style>
+        [x-cloak] { display: none !important; }
+
+        .htmx-indicator {
+            opacity: 0;
+            transition: opacity 200ms ease-in;
+        }
+        .htmx-request .htmx-indicator {
+            opacity: 1;
+        }
+        .htmx-request.htmx-indicator {
+            opacity: 1;
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+
+    {% block head %}{% endblock %}
+</head>
+<body class="h-full" x-data="{ sidebarOpen: true }">
+    <div class="min-h-full">
+        <!-- Header -->
+        <header class="bg-iceberg-700 shadow-lg">
+            <div class="mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex h-16 items-center justify-between">
+                    <!-- Logo and title -->
+                    <div class="flex items-center">
+                        <button
+                            @click="sidebarOpen = !sidebarOpen"
+                            class="mr-4 rounded-md p-2 text-iceberg-200 hover:bg-iceberg-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-white"
+                            title="Toggle sidebar"
+                        >
+                            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                            </svg>
+                        </button>
+                        <div class="flex items-center">
+                            <svg class="h-8 w-8 text-white" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                            </svg>
+                            <span class="ml-3 text-xl font-bold text-white">Iceberg Explorer</span>
+                        </div>
+                    </div>
+
+                    <!-- Navigation links -->
+                    <nav class="hidden md:flex items-center space-x-4">
+                        <a href="/" class="rounded-md px-3 py-2 text-sm font-medium text-iceberg-200 hover:bg-iceberg-600 hover:text-white {% block nav_home %}{% endblock %}">
+                            Catalog
+                        </a>
+                        <a href="/query" class="rounded-md px-3 py-2 text-sm font-medium text-iceberg-200 hover:bg-iceberg-600 hover:text-white {% block nav_query %}{% endblock %}">
+                            Query
+                        </a>
+                    </nav>
+
+                    <!-- Health indicator -->
+                    <div class="flex items-center">
+                        <div
+                            hx-get="/health"
+                            hx-trigger="load, every 30s"
+                            hx-target="#health-status"
+                            hx-swap="innerHTML"
+                        >
+                            <span id="health-status" class="flex items-center text-sm">
+                                <span class="htmx-indicator mr-2">
+                                    <svg class="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                </span>
+                                <span class="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
+                                    <span class="mr-1.5 h-2 w-2 rounded-full bg-green-500"></span>
+                                    Healthy
+                                </span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main content area with sidebar -->
+        <div class="flex h-[calc(100vh-4rem)]">
+            <!-- Sidebar -->
+            <aside
+                x-show="sidebarOpen"
+                x-transition:enter="transition ease-out duration-200"
+                x-transition:enter-start="-translate-x-full"
+                x-transition:enter-end="translate-x-0"
+                x-transition:leave="transition ease-in duration-200"
+                x-transition:leave-start="translate-x-0"
+                x-transition:leave-end="-translate-x-full"
+                class="w-72 flex-shrink-0 border-r border-gray-200 bg-white overflow-hidden"
+            >
+                <div class="flex h-full flex-col">
+                    <!-- Sidebar header -->
+                    <div class="border-b border-gray-200 px-4 py-3">
+                        <h2 class="text-lg font-semibold text-gray-900">Namespaces</h2>
+                    </div>
+
+                    <!-- Sidebar content (tree view) -->
+                    <div class="flex-1 overflow-y-auto p-4" id="sidebar-content">
+                        {% block sidebar %}
+                        <div class="text-sm text-gray-500">
+                            <p>Loading namespaces...</p>
+                        </div>
+                        {% endblock %}
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Main content -->
+            <main class="flex-1 overflow-y-auto bg-gray-50">
+                <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+                    {% block content %}
+                    <div class="rounded-lg border border-dashed border-gray-300 bg-white p-12 text-center">
+                        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                        </svg>
+                        <h3 class="mt-2 text-sm font-semibold text-gray-900">Select a table</h3>
+                        <p class="mt-1 text-sm text-gray-500">Browse namespaces in the sidebar and click on a table to view its details.</p>
+                    </div>
+                    {% endblock %}
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Note: A global loading overlay could be added here for long operations -->
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

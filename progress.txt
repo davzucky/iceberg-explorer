@@ -14,6 +14,13 @@
 - FastAPI routes with :path parameter: declare more specific routes (e.g., /tables/{path}/schema) before general ones (e.g., /tables/{path})
 - API models in `models/` package (Pydantic), internal models in `query/models.py` (dataclasses)
 - Query API: POST /api/v1/query/execute to execute, returns query_id for tracking
+- Templates in `templates/` use Jinja2 with `{% block %}` inheritance; partials in `templates/partials/`
+- UI routes serve HTML via Jinja2Templates(directory=TEMPLATES_DIR) with request as first arg
+- Use HTMX for dynamic content loading, Alpine.js for client-side state (e.g., sidebar toggle)
+- Tailwind CSS via CDN for styling with custom `iceberg` color palette
+- UI partials use `hx-indicator` for inline loading spinners; templates use Alpine.js x-data for local state
+- Use `_encode_namespace()` to URL-encode namespace paths; `_generate_id()` for stable HTML element IDs
+- OpenTelemetry: use `get_tracer()` and `get_meter()` from observability.py; `reset_observability()` in tests
 
 ---
 
@@ -283,4 +290,190 @@ Thread: https://ampcode.com/threads/T-019bab3b-5c4a-72f9-91e4-c22e62efa689
   - Reuse engine.health_check() which returns dict with healthy, duckdb, catalog, error keys
   - FastAPI Response parameter allows setting status_code dynamically
   - Use 503 for unhealthy/not ready responses per HTTP conventions
+---
+
+## 2026-01-12 - US-014
+Thread: https://ampcode.com/threads/T-019bb192-0f9e-7085-bc27-fffb33395133
+- What was implemented:
+  - Base HTML template (base.html) with header, collapsible sidebar, main content area
+  - Header with Iceberg Explorer logo, navigation links (Catalog, Query), health status indicator
+  - Sidebar with Namespaces title and placeholder for namespace tree (lazy-loads via HTMX)
+  - Tailwind CSS via CDN with custom iceberg color palette
+  - HTMX 2.0.4 for dynamic updates
+  - Alpine.js 3.14.3 for client-side interactivity (sidebar toggle)
+  - Responsive design with viewport meta tag
+  - UI routes: GET / (index), GET /query (query page), GET /ui/partials/namespace-tree
+  - Jinja2 templating with block inheritance pattern
+  - 11 new tests (260 total)
+- Files changed:
+  - src/iceberg_explorer/templates/base.html (new)
+  - src/iceberg_explorer/templates/index.html (new)
+  - src/iceberg_explorer/templates/query.html (new)
+  - src/iceberg_explorer/templates/partials/namespace_tree.html (new)
+  - src/iceberg_explorer/api/routes/ui.py (new)
+  - src/iceberg_explorer/main.py (updated - added ui_router)
+  - tests/test_ui.py (new)
+- **Learnings for future iterations:**
+  - Use Jinja2Templates with request as first argument for FastAPI template responses
+  - Alpine.js x-data and @click work well for toggle state (sidebarOpen)
+  - HTMX htmx-indicator class needs opacity transition CSS for smooth loading states
+  - Avoid global loading overlays that block clicks - use inline indicators instead
+  - Base template uses {% block %} pattern for extensible layouts
+---
+
+## 2026-01-12 - US-015
+Thread: https://ampcode.com/threads/T-019bb19a-1af0-72dc-b67b-df40b5854f70
+- What was implemented:
+  - Sidebar namespace tree with expand/collapse functionality
+  - HTMX lazy loading for child namespaces via /ui/partials/namespace-children endpoint
+  - Tables shown as leaf nodes under namespaces with table icon
+  - Click table to load details in main panel via /ui/partials/table-details endpoint
+  - Loading indicators during fetch (inline spinners with hx-indicator)
+  - Table details view with tabs: Overview, Schema, Snapshots
+  - Updated ui.py with 3 new endpoints: namespace_tree_partial, namespace_children_partial, table_details_partial
+  - 7 new tests (18 UI tests total, 267 overall)
+- Files changed:
+  - src/iceberg_explorer/api/routes/ui.py (updated - added namespace tree and table details endpoints)
+  - src/iceberg_explorer/api/routes/catalog.py (updated - fixed import order)
+  - src/iceberg_explorer/templates/partials/namespace_tree.html (updated - full implementation)
+  - src/iceberg_explorer/templates/partials/namespace_children.html (new)
+  - src/iceberg_explorer/templates/partials/table_details.html (new)
+  - tests/test_ui.py (updated - new tests for namespace children and table details)
+- **Learnings for future iterations:**
+  - Use hashlib.md5 with usedforsecurity=False for generating stable element IDs
+  - HTMX hx-trigger="click once" prevents re-fetching on subsequent clicks
+  - Alpine.js x-collapse directive works well with HTMX for smooth expand/collapse
+  - Table path format in UI: URL-encode namespace parts, then append .tablename
+---
+
+## 2026-01-12 - US-016
+Thread: https://ampcode.com/threads/T-019bb1a0-584c-778d-a443-8ea366cae220
+- What was implemented:
+  - Enhanced table details view with partitioning information in Overview tab
+  - Added searchable column list in Schema tab with Alpine.js filtering
+  - Added partition column badges in Schema tab
+  - Extracted partition column information from iceberg_metadata()
+  - All features use Alpine.js for client-side interactivity (no additional HTMX calls needed)
+- Files changed:
+  - src/iceberg_explorer/api/routes/ui.py (updated - fetch partition columns from metadata)
+  - src/iceberg_explorer/templates/partials/table_details.html (updated - partitioning display, search, badges)
+- **Learnings for future iterations:**
+  - Extract partition columns from iceberg_metadata() partition_value column
+  - Alpine.js x-data can be nested within elements for scoped state (searchQuery in Schema tab)
+  - Use x-show with template interpolation for filtering: `x-show="!searchQuery || '{{ col.name }}'.toLowerCase().includes(searchQuery.toLowerCase())"`
+  - Partition columns displayed with purple badges for visual distinction from type badges (blue)
+---
+
+## 2026-01-12 - US-017
+Thread: https://ampcode.com/threads/T-019bb1a5-c408-71d9-90aa-fcf801eb7cbb
+- What was implemented:
+  - SQL Query Editor with Monaco editor integration (SQL syntax highlighting)
+  - Run Query button that executes queries via fetch API to /api/v1/query/execute
+  - Timeout selector dropdown with options: 30s, 60s, 5m, 15m, 1h
+  - Cancel button that appears during execution and calls /api/v1/query/{id}/cancel
+  - Error message display with red alert box and dismiss button
+  - Status display showing current query state during execution
+  - Keyboard shortcut: Ctrl/Cmd + Enter to run query
+  - Result summary showing row count and execution duration
+  - Alpine.js component (queryEditor) for state management
+  - Status polling for running queries via /api/v1/query/{id}/status
+  - Streaming result consumption via /api/v1/query/{id}/results
+  - 8 new UI tests (25 total UI tests, 274 overall)
+- Files changed:
+  - src/iceberg_explorer/templates/query.html (updated - full implementation)
+  - tests/test_ui.py (updated - added 8 new tests for query editor)
+- **Learnings for future iterations:**
+  - Monaco editor loaded via CDN using require.config and dynamic import
+  - Use fetch API with async/await for API calls in Alpine.js components
+  - Poll for status updates with setInterval, stop on terminal states (completed, failed, cancelled)
+  - Stream NDJSON results with ReadableStream API and TextDecoder
+  - x-cloak attribute hides elements until Alpine.js initializes them
+  - Use :disabled binding to disable form elements during execution
+---
+
+## 2026-01-12 - US-018
+Thread: https://ampcode.com/threads/T-019bb1ce-79bf-77cb-9dab-1ef0272e87ac
+- What was implemented:
+  - Scrollable results table with sticky headers (max-height 500px)
+  - Clickable column headers for sorting with Alpine.js (toggleSort, applySort functions)
+  - Per-column filter inputs with text and numeric range support (>, <, >=, <=)
+  - Pagination controls with page size selector (100, 250, 500, 1000) and prev/next buttons
+  - Row count and execution time displayed in results summary
+  - Streaming indicator during data fetch with row count progress
+  - Client-side filtering with applyFilters() function
+  - NULL value display and formatting for various data types
+- Files changed:
+  - src/iceberg_explorer/templates/query.html (updated - added results table, sorting, filtering, pagination)
+  - prd.json (updated - marked US-018 passes: true)
+- **Learnings for future iterations:**
+  - Results table uses CSS position: sticky for headers during scroll
+  - Alpine.js computed properties (get paginatedRows, get totalPages) for reactive pagination
+  - Numeric range filters use regex matching for operators (>, <, >=, <=)
+  - formatCell() helper handles null, boolean, and object formatting
+---
+
+## 2026-01-12 - US-013
+Thread: https://ampcode.com/threads/T-019bb1d5-dc7d-747c-86bd-c5308f1c4684
+- What was implemented:
+  - POST /api/v1/export/csv endpoint for exporting query results as CSV
+  - Accepts either query_id (from previously executed query) or inline SQL
+  - Streams CSV as chunked download with proper Content-Disposition header
+  - Configurable max export size via ExportConfig (default 1GB)
+  - Handles various data types: NULL, boolean, datetime, bytes, PyArrow scalars
+  - 28 new tests (302 total)
+- Files changed:
+  - src/iceberg_explorer/config.py (updated - added ExportConfig)
+  - src/iceberg_explorer/api/routes/export.py (new)
+  - src/iceberg_explorer/main.py (updated - registered export router)
+  - tests/test_export.py (new)
+- **Learnings for future iterations:**
+  - PyArrow scalars have as_py() method but return None for null values; must check after conversion
+  - Python csv module uses CRLF line endings by default; tests should strip lines when comparing
+  - Streaming CSV uses io.StringIO buffer with periodic flushing at 8KB to avoid memory issues
+  - ExportConfig follows same pattern as other config classes (pydantic-settings with env prefix)
+---
+
+## 2026-01-12 - US-019
+Thread: https://ampcode.com/threads/T-019bb1dc-3f41-7265-9ac7-a72115f28722
+- What was implemented:
+  - Export CSV button in results toolbar next to Results header
+  - Button only visible when columns.length > 0 && queryId (after successful query)
+  - Loading spinner and "Exporting..." text during export
+  - Disabled when isExporting, isExecuting, or isStreaming
+  - Downloads file with appropriate name extracted from Content-Disposition header
+  - Uses POST /api/v1/export/csv with query_id from executed query
+  - Uses Blob API and dynamic anchor element for file download
+- Files changed:
+  - src/iceberg_explorer/templates/query.html (updated - added isExporting state, Export CSV button, exportCSV function)
+  - .gitignore (updated - excluded dev-browser artifacts)
+- **Learnings for future iterations:**
+  - Use x-show and x-cloak for conditional button visibility with Alpine.js
+  - File download with fetch: create blob, create object URL, create anchor, click, cleanup
+  - Get filename from Content-Disposition header with regex: /filename="?([^"]+)"?/
+  - Browser automation timeouts may occur when loading heavy CDN resources like Monaco editor
+---
+
+## 2026-01-12 - US-021
+Thread: https://ampcode.com/threads/T-019bb1e3-9124-768d-a723-4949f3761778
+- What was implemented:
+  - Created observability.py module with OpenTelemetry SDK integration
+  - OpenTelemetry auto-instrumentation for FastAPI routes
+  - DuckDB query spans with db.system, db.operation, query.id, query.timeout_seconds attributes
+  - Span attributes for query completion: query.duration_seconds, query.rows_returned, query.status
+  - Metrics: query_duration_seconds histogram, query_rows_returned counter, active_queries gauge
+  - Configurable OTLP exporter endpoint via OTelConfig
+  - Structured JSON logging with trace context (trace_id, span_id) via structlog
+  - No SQL content recorded in spans (security: no sensitive data in telemetry)
+  - 22 new tests (324 total)
+- Files changed:
+  - src/iceberg_explorer/observability.py (new)
+  - src/iceberg_explorer/main.py (updated - setup_opentelemetry call)
+  - src/iceberg_explorer/query/executor.py (updated - tracing and metrics integration)
+  - tests/test_observability.py (new)
+- **Learnings for future iterations:**
+  - OpenTelemetry global tracer provider can only be set once per process
+  - Use get_tracer()/get_meter() with caching for consistent instrumentation
+  - structlog processors chain: add trace context via custom processor before JSONRenderer
+  - Use UpDownCounter for active query count (supports increment/decrement)
+  - Test OTel with mocked providers or in-memory exporters; avoid global provider conflicts in tests
 ---
