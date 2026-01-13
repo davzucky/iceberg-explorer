@@ -2,6 +2,7 @@
 
 import hashlib
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated
 from urllib.parse import quote
@@ -271,8 +272,6 @@ async def table_details_partial(
                             if hasattr(timestamp_ms, "timestamp"):
                                 timestamp_ms = int(timestamp_ms.timestamp() * 1000)
                             elif isinstance(timestamp_ms, str):
-                                from datetime import datetime
-
                                 dt = datetime.fromisoformat(timestamp_ms.replace("Z", "+00:00"))
                                 timestamp_ms = int(dt.timestamp() * 1000)
                             else:

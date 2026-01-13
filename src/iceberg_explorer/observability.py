@@ -242,10 +242,12 @@ def shutdown_opentelemetry() -> None:
         with contextlib.suppress(Exception):
             _tracer_provider.force_flush(timeout_millis=5000)
             _tracer_provider.shutdown()
+        _tracer_provider = None
     if _meter_provider is not None:
         with contextlib.suppress(Exception):
             _meter_provider.force_flush(timeout_millis=5000)
             _meter_provider.shutdown()
+        _meter_provider = None
 
 
 def reset_observability() -> None:

@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import csv
 import io
+import logging
 from collections.abc import AsyncGenerator
 from datetime import datetime
 from uuid import UUID
@@ -20,6 +21,8 @@ from pydantic import BaseModel, Field
 from iceberg_explorer.config import get_settings
 from iceberg_explorer.query.executor import get_executor, validate_sql
 from iceberg_explorer.query.models import InvalidSQLError, QueryState
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/export", tags=["export"])
 
@@ -133,7 +136,7 @@ async def _stream_csv(
                 chunk = row_buffer.getvalue().encode("utf-8")
                 bytes_written += len(chunk)
                 if bytes_written > max_size_bytes:
-                    raise ValueError(f"Export size exceeds maximum of {max_size_bytes} bytes")
+                    raise CSVExportError(f"Export size exceeds maximum of {max_size_bytes} bytes")
                 yield chunk
                 row_buffer = io.StringIO()
                 row_writer = csv.writer(row_buffer)
@@ -186,8 +189,9 @@ async def export_csv(request: CSVExportRequest) -> StreamingResponse:
 
         try:
             result = await asyncio.to_thread(executor.execute, request.sql)
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e)) from e
+        except Exception:
+            logger.exception("Query execution failed for inline SQL export")
+            raise HTTPException(status_code=500, detail="Internal server error") from None
 
         query_uuid = result.query_id
     else:
