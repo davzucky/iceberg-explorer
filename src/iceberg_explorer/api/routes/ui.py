@@ -11,6 +11,12 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
+from iceberg_explorer.api.routes.utils import (
+    UNIT_SEPARATOR,
+    _build_namespace_path,
+    _parse_namespace,
+    _quote_identifier,
+)
 from iceberg_explorer.query.engine import get_engine
 
 TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates"
@@ -19,28 +25,6 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 router = APIRouter(tags=["ui"])
 
 logger = logging.getLogger(__name__)
-
-UNIT_SEPARATOR = "\x1f"
-
-
-def _parse_namespace(namespace_str: str | None) -> list[str]:
-    """Parse a namespace string into its components."""
-    if not namespace_str:
-        return []
-    return namespace_str.split(UNIT_SEPARATOR)
-
-
-def _quote_identifier(identifier: str) -> str:
-    """Quote an identifier for use in SQL."""
-    escaped = identifier.replace('"', '""')
-    return f'"{escaped}"'
-
-
-def _build_namespace_path(catalog_name: str, namespace: list[str]) -> str:
-    """Build a fully qualified namespace path for SQL."""
-    parts = [_quote_identifier(catalog_name)]
-    parts.extend(_quote_identifier(ns) for ns in namespace)
-    return ".".join(parts)
 
 
 def _encode_namespace(namespace_parts: list[str]) -> str:
