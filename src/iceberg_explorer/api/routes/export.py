@@ -86,7 +86,7 @@ async def _stream_csv(
 
     max_wait_seconds = 3600
     waited = 0.0
-    while result.state == QueryState.RUNNING:
+    while result.state in (QueryState.PENDING, QueryState.RUNNING):
         await asyncio.sleep(0.1)
         waited += 0.1
         if waited >= max_wait_seconds:

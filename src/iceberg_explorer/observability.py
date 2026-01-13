@@ -235,13 +235,17 @@ def setup_opentelemetry(app: FastAPI) -> None:
 
 def shutdown_opentelemetry() -> None:
     """Shutdown OpenTelemetry providers to flush pending telemetry."""
+    import contextlib
+
     global _tracer_provider, _meter_provider
     if _tracer_provider is not None:
-        _tracer_provider.force_flush(timeout_millis=5000)
-        _tracer_provider.shutdown()
+        with contextlib.suppress(Exception):
+            _tracer_provider.force_flush(timeout_millis=5000)
+            _tracer_provider.shutdown()
     if _meter_provider is not None:
-        _meter_provider.force_flush(timeout_millis=5000)
-        _meter_provider.shutdown()
+        with contextlib.suppress(Exception):
+            _meter_provider.force_flush(timeout_millis=5000)
+            _meter_provider.shutdown()
 
 
 def reset_observability() -> None:

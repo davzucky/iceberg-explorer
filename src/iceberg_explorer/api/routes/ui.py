@@ -203,114 +203,123 @@ async def table_details_partial(
             table_name = table_path[last_dot + 1 :]
             namespace_parts = _parse_namespace(namespace_str)
 
-            engine = get_engine()
-            if not engine.is_initialized:
-                engine.initialize()
+            # Validate namespace and table name are not empty
+            if not namespace_parts:
+                error = "Invalid namespace in table path"
+            elif not table_name:
+                error = "Invalid table name in table path"
+            else:
+                engine = get_engine()
+                if not engine.is_initialized:
+                    engine.initialize()
 
-            catalog_name = engine.catalog_name
+                catalog_name = engine.catalog_name
 
-            with engine.get_connection() as conn:
-                namespace_path = _build_namespace_path(catalog_name, namespace_parts)
-                quoted_table = _quote_identifier(table_name)
-                full_table_path = f"{namespace_path}.{quoted_table}"
+                with engine.get_connection() as conn:
+                    namespace_path = _build_namespace_path(catalog_name, namespace_parts)
+                    quoted_table = _quote_identifier(table_name)
+                    full_table_path = f"{namespace_path}.{quoted_table}"
 
-                conn.execute(f"SELECT * FROM {full_table_path} LIMIT 0")
+                    conn.execute(f"SELECT * FROM {full_table_path} LIMIT 0")
 
-                columns_sql = f"""
-                    SELECT column_name, data_type, is_nullable
-                    FROM {namespace_path}.information_schema.columns
-                    WHERE table_name = ?
-                    ORDER BY ordinal_position
-                """
-                columns = conn.execute(columns_sql, [table_name]).fetchall()
+                    columns_sql = f"""
+                        SELECT column_name, data_type, is_nullable
+                        FROM {namespace_path}.information_schema.columns
+                        WHERE table_name = ?
+                        ORDER BY ordinal_position
+                    """
+                    columns = conn.execute(columns_sql, [table_name]).fetchall()
 
-                partition_columns: set[str] = set()
-                try:
-                    unquoted_path = f"{catalog_name}.{'.'.join(namespace_parts)}.{table_name}"
-                    metadata_sql = "SELECT * FROM iceberg_metadata(?) LIMIT 100"
-                    cur = conn.execute(metadata_sql, [unquoted_path])
-                    metadata_result = cur.fetchall()
-                    if metadata_result:
-                        description = cur.description
-                        if description:
-                            col_names = [col[0].lower() for col in description]
-                            if "partition_value" in col_names or "partition" in col_names:
-                                part_idx = (
-                                    col_names.index("partition_value")
-                                    if "partition_value" in col_names
-                                    else col_names.index("partition")
-                                )
-                                for row in metadata_result:
-                                    if row[part_idx]:
-                                        for part in str(row[part_idx]).split(","):
-                                            if "=" in part:
-                                                partition_columns.add(part.split("=")[0].strip())
-                except Exception as e:
-                    logger.debug("Failed to extract partition columns: %s", e)
+                    partition_columns: set[str] = set()
+                    try:
+                        unquoted_path = f"{catalog_name}.{'.'.join(namespace_parts)}.{table_name}"
+                        metadata_sql = "SELECT * FROM iceberg_metadata(?) LIMIT 100"
+                        cur = conn.execute(metadata_sql, [unquoted_path])
+                        metadata_result = cur.fetchall()
+                        if metadata_result:
+                            description = cur.description
+                            if description:
+                                col_names = [col[0].lower() for col in description]
+                                if "partition_value" in col_names or "partition" in col_names:
+                                    part_idx = (
+                                        col_names.index("partition_value")
+                                        if "partition_value" in col_names
+                                        else col_names.index("partition")
+                                    )
+                                    for row in metadata_result:
+                                        if row[part_idx]:
+                                            for part in str(row[part_idx]).split(","):
+                                                if "=" in part:
+                                                    partition_columns.add(
+                                                        part.split("=")[0].strip()
+                                                    )
+                    except Exception as e:
+                        logger.debug("Failed to extract partition columns: %s", e)
 
-                snapshots = []
-                location = None
-                try:
-                    unquoted_path = f"{catalog_name}.{'.'.join(namespace_parts)}.{table_name}"
-                    snapshot_result = conn.execute(
-                        "SELECT sequence_number, snapshot_id, timestamp_ms FROM iceberg_snapshots(?)",
-                        [unquoted_path],
-                    ).fetchall()
+                    snapshots = []
+                    location = None
+                    try:
+                        unquoted_path = f"{catalog_name}.{'.'.join(namespace_parts)}.{table_name}"
+                        snapshot_result = conn.execute(
+                            "SELECT sequence_number, snapshot_id, timestamp_ms "
+                            "FROM iceberg_snapshots(?)",
+                            [unquoted_path],
+                        ).fetchall()
 
-                    for row in snapshot_result:
-                        timestamp_ms = row[2]
-                        if hasattr(timestamp_ms, "timestamp"):
-                            timestamp_ms = int(timestamp_ms.timestamp() * 1000)
-                        elif isinstance(timestamp_ms, str):
-                            from datetime import datetime
+                        for row in snapshot_result:
+                            timestamp_ms = row[2]
+                            if hasattr(timestamp_ms, "timestamp"):
+                                timestamp_ms = int(timestamp_ms.timestamp() * 1000)
+                            elif isinstance(timestamp_ms, str):
+                                from datetime import datetime
 
-                            dt = datetime.fromisoformat(timestamp_ms.replace("Z", "+00:00"))
-                            timestamp_ms = int(dt.timestamp() * 1000)
-                        else:
-                            timestamp_ms = int(timestamp_ms)
+                                dt = datetime.fromisoformat(timestamp_ms.replace("Z", "+00:00"))
+                                timestamp_ms = int(dt.timestamp() * 1000)
+                            else:
+                                timestamp_ms = int(timestamp_ms)
 
-                        snapshots.append(
+                            snapshots.append(
+                                {
+                                    "sequence_number": int(row[0]),
+                                    "snapshot_id": int(row[1]),
+                                    "timestamp_ms": timestamp_ms,
+                                }
+                            )
+
+                        metadata_result = conn.execute(
+                            "SELECT * FROM iceberg_metadata(?) LIMIT 1",
+                            [unquoted_path],
+                        ).fetchone()
+                        if metadata_result and metadata_result[0]:
+                            path_parts = metadata_result[0].split("/metadata/")
+                            if len(path_parts) > 1:
+                                location = path_parts[0]
+                    except Exception as e:
+                        logger.debug("Failed to fetch metadata: %s", e)
+
+                    partition_column_list = sorted(partition_columns) if partition_columns else []
+                    current_snapshot = (
+                        max(snapshots, key=lambda s: s["sequence_number"]) if snapshots else None
+                    )
+                    table_info = {
+                        "namespace": namespace_parts,
+                        "name": table_name,
+                        "location": location
+                        or f"s3://{catalog_name}/{'.'.join(namespace_parts)}/{table_name}",
+                        "format": "ICEBERG",
+                        "partition_columns": partition_column_list,
+                        "columns": [
                             {
-                                "sequence_number": int(row[0]),
-                                "snapshot_id": int(row[1]),
-                                "timestamp_ms": timestamp_ms,
+                                "name": col[0],
+                                "type": col[1],
+                                "nullable": col[2].upper() == "YES" if col[2] else True,
+                                "is_partition": col[0] in partition_columns,
                             }
-                        )
-
-                    metadata_result = conn.execute(
-                        "SELECT * FROM iceberg_metadata(?) LIMIT 1",
-                        [unquoted_path],
-                    ).fetchone()
-                    if metadata_result and metadata_result[0]:
-                        path_parts = metadata_result[0].split("/metadata/")
-                        if len(path_parts) > 1:
-                            location = path_parts[0]
-                except Exception as e:
-                    logger.debug("Failed to fetch metadata: %s", e)
-
-                partition_column_list = sorted(partition_columns) if partition_columns else []
-                current_snapshot = (
-                    max(snapshots, key=lambda s: s["sequence_number"]) if snapshots else None
-                )
-                table_info = {
-                    "namespace": namespace_parts,
-                    "name": table_name,
-                    "location": location
-                    or f"s3://{catalog_name}/{'.'.join(namespace_parts)}/{table_name}",
-                    "format": "ICEBERG",
-                    "partition_columns": partition_column_list,
-                    "columns": [
-                        {
-                            "name": col[0],
-                            "type": col[1],
-                            "nullable": col[2].upper() == "YES" if col[2] else True,
-                            "is_partition": col[0] in partition_columns,
-                        }
-                        for col in columns
-                    ],
-                    "snapshots": snapshots,
-                    "current_snapshot": current_snapshot,
-                }
+                            for col in columns
+                        ],
+                        "snapshots": snapshots,
+                        "current_snapshot": current_snapshot,
+                    }
     except Exception as e:
         logger.warning("Failed to load table details: %s", e)
         error = str(e)
