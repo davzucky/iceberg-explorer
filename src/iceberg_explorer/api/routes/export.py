@@ -146,7 +146,7 @@ async def _stream_csv(
             chunk = remaining.encode("utf-8")
             bytes_written += len(chunk)
             if bytes_written > max_size_bytes:
-                raise ValueError(f"Export size exceeds maximum of {max_size_bytes} bytes")
+                raise CSVExportError(f"Export size exceeds maximum of {max_size_bytes} bytes")
             yield chunk
 
 

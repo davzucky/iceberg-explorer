@@ -231,9 +231,11 @@ async def table_details_partial(
                     """
                     columns = conn.execute(columns_sql, [table_name]).fetchall()
 
+                    # Compute unquoted path once for metadata/snapshot queries
+                    unquoted_path = f"{catalog_name}.{'.'.join(namespace_parts)}.{table_name}"
+
                     partition_columns: set[str] = set()
                     try:
-                        unquoted_path = f"{catalog_name}.{'.'.join(namespace_parts)}.{table_name}"
                         metadata_sql = "SELECT * FROM iceberg_metadata(?) LIMIT 100"
                         cur = conn.execute(metadata_sql, [unquoted_path])
                         metadata_result = cur.fetchall()
@@ -260,7 +262,6 @@ async def table_details_partial(
                     snapshots = []
                     location = None
                     try:
-                        unquoted_path = f"{catalog_name}.{'.'.join(namespace_parts)}.{table_name}"
                         snapshot_result = conn.execute(
                             "SELECT sequence_number, snapshot_id, timestamp_ms "
                             "FROM iceberg_snapshots(?)",
@@ -319,9 +320,9 @@ async def table_details_partial(
                         "snapshots": snapshots,
                         "current_snapshot": current_snapshot,
                     }
-    except Exception as e:
-        logger.warning("Failed to load table details: %s", e)
-        error = str(e)
+    except Exception:
+        logger.exception("Failed to load table details")
+        error = "An unexpected error occurred while loading table details."
 
     return templates.TemplateResponse(
         request,

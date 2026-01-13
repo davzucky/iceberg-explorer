@@ -257,6 +257,9 @@ def reset_observability() -> None:
     global _initialized, _tracer, _meter, _tracer_provider, _meter_provider
     global _query_duration_histogram, _query_rows_counter, _active_queries_gauge
 
+    # Shutdown providers before resetting to ensure proper cleanup
+    shutdown_opentelemetry()
+
     # Uninstrument FastAPI to avoid double-instrumentation on re-setup
     with contextlib.suppress(Exception):
         FastAPIInstrumentor.uninstrument()
@@ -264,8 +267,6 @@ def reset_observability() -> None:
     _initialized = False
     _tracer = None
     _meter = None
-    _tracer_provider = None
-    _meter_provider = None
     _query_duration_histogram = None
     _query_rows_counter = None
     _active_queries_gauge = None
