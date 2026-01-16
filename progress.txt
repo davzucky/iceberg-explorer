@@ -164,6 +164,87 @@ Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
 - SchemaField includes field_id, name, type, nullable, is_partition_column
 - Column statistics returned but not yet populated
 - is_nullable determined from information_schema.columns.is_nullable field
+
+---
+## 2026-01-16 - US-009
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Verified all acceptance criteria for US-009 (Execute Query Endpoint) are met
+- POST /api/v1/query/execute accepts SQL and optional timeout
+- Returns query_id for tracking
+- Validates SQL is SELECT-only before execution
+- Default timeout 300s, user can specify 10s-3600s
+- Returns error with message for invalid queries
+- Unit tests for SQL validation
+- Integration tests for execution
+- All 324 tests pass
+- Code has type hints
+
+**Learnings for future iterations:**
+- execute_query() uses asyncio.to_thread() to run executor.execute in thread pool
+- Returns ExecuteQueryResponse with query_id and status fields
+- validate_sql() called before execution for security
+- Timeout validation handled in executor._validate_timeout()
+
+---
+## 2026-01-16 - US-010
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Verified all acceptance criteria for US-010 (Query Results Endpoint) are met
+- GET /api/v1/query/{query_id}/results streams JSON lines
+- Stream format: metadata -> data batches -> progress -> complete
+- Support page_size param (100, 250, 500, 1000)
+- Support offset param for pagination
+- Include execution metrics in complete message
+- Integration tests verifying streaming behavior
+- All 324 tests pass
+- Code has type hints
+
+**Learnings for future iterations:**
+- StreamingResponse with application/x-ndjson content type
+- _stream_results() is an async generator yielding JSON lines
+- Waits up to 1 hour for query completion
+- Arrow values converted to JSON-serializable via _convert_value()
+- Batches sent in chunks of 100 rows
+- Progress updates sent after each batch
+- Cleanup called in finally block to prevent memory leaks
+- page_size must be in VALID_PAGE_SIZES set
+
+---
+## 2026-01-16 - US-011
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Verified all acceptance criteria for US-011 (Query Status Endpoint) are met
+- GET /api/v1/query/{query_id}/status returns current state
+- States: pending, running, completed, failed, cancelled
+- Include progress info for running queries (rows_processed)
+- Include error message for failed queries
+- Unit tests for state transitions
+- All 324 tests pass
+- Code has type hints
+
+**Learnings for future iterations:**
+- get_query_status() returns QueryStatusResponse with query_id, status, rows_processed, error_message
+- rows_processed only set for completed queries (from metrics)
+- Returns 404 if query not found
+- Returns 400 if query_id is invalid UUID format
+
+---
+## 2026-01-16 - US-012
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Verified all acceptance criteria for US-012 (Cancel Query Endpoint) are met
+- POST /api/v1/query/{query_id}/cancel stops execution
+- DuckDB query interrupted cleanly via executor.cancel()
+- Status updates to cancelled
+- Returns success even if query already finished (cancelled flag)
+- Integration tests verifying cancellation works
+- All 324 tests pass
+- Code has type hints
+
+**Learnings for future iterations:**
+- cancel_query() returns CancelQueryResponse with query_id, cancelled, status fields
+- was_cancelled is True if cancellation succeeded, False if already terminal
+- Calls executor.cancel() which uses threading.Event and conn.interrupt()
+- Returns 404 if query not found
+- Returns 400 if query_id is invalid UUID format
+---
 ---
 ---
 ---
