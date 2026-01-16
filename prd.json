@@ -63,7 +63,7 @@
         "A default warehouse named demo is configured"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {

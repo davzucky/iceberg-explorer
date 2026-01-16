@@ -76,3 +76,36 @@ Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
 - network_mode: service:minio makes the app share MinIO's network namespace
 
 ---
+
+## Fri Jan 17 01:15:00 AM JST 2026 - US-004
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Added PostgreSQL service to docker-compose.yml using postgres:15 image
+  - Configured with user/password: iceberg/iceberg
+  - Database name: lakekeeper
+  - Added persistent volume: postgres-data
+  - Healthcheck: pg_isready -U iceberg -d lakekeeper
+- Added Lakekeeper service using lakekeeper/lakekeeper:latest image
+  - Exposed port 8181 for REST catalog API
+  - Depends on PostgreSQL becoming healthy (condition: service_healthy)
+  - Configured catalog URI: postgresql://iceberg:iceberg@postgres:5432/lakekeeper
+  - Configured warehouse location: s3://iceberg-warehouse
+  - Configured warehouse name: demo
+  - Configured S3 backend: MinIO endpoint http://minio:9000, credentials minioadmin/minioadmin
+  - Enabled path-style access for MinIO (LAKEKEEPER__WAREHOUSE__S3__PATH_STYLE_ACCESS=true)
+  - Added healthcheck: curl http://localhost:8181/health
+  - Command: catalog (starts REST catalog service)
+- Added postgres-data volume for PostgreSQL persistence
+- Updated app service to depend on Lakekeeper being healthy
+- Validated docker-compose.yml with PyYAML and docker-compose config
+- Quality checks: ruff and pytest pass
+
+**Learnings for future iterations:**
+- PostgreSQL healthcheck uses pg_isready command with user and database
+- Lakekeeper uses double underscore for nested configuration (LAKEKEEPER__WAREHOUSE__NAME)
+- S3 path-style access is required for MinIO (not virtual-hosted style)
+- Lakekeeper environment variables for S3: ACCESS_KEY, SECRET_KEY, ENDPOINT, PATH_STYLE_ACCESS
+- Lakekeeper catalog command starts REST catalog service on port 8181
+- Docker volumes for named volumes are defined at the bottom of docker-compose.yml
+- Depends on chain: app -> lakekeeper -> postgres ensures correct startup order
+
+---
