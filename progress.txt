@@ -37,4 +37,28 @@ Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
 - Settings are cached globally via _settings variable
 - Use reset_settings() in tests to clear cache
 - JSON config file values are overridden by env vars
+
+---
+## 2026-01-16 - US-003
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Verified all acceptance criteria for US-003 (DuckDB Engine Initialization) are met
+- DuckDBEngine class manages connection pool
+- Iceberg catalog attached on initialization (REST or local)
+- Read-only mode enforced (via validate_sql in executor)
+- Memory limit and thread count configurable from settings
+- Health check method verifies DuckDB and catalog connectivity
+- 18 engine tests with local Iceberg catalog fixtures
+- All 324 tests pass
+- Ruff checks pass
+- Code has type hints
+
+**Learnings for future iterations:**
+- DuckDB engine uses threading.Lock for thread-safe connection handling
+- Engine is cached globally via _engine variable
+- Use reset_engine() in tests to clear cache
+- Health check returns dict with healthy, duckdb, catalog, error fields
+- get_connection() is a contextmanager that yields cursor
+- Write access required at connection level for INSTALL/LOAD/ATTACH, but user SQL is SELECT-only
+- SQL injection protection via quoting in ATTACH statements
+---
 ---
