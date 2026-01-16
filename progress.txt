@@ -3,3 +3,25 @@ Started: Fri Jan 17 00:35:00 AM JST 2026
 ---
 
 ## Codebase Patterns
+
+## Fri Jan 17 00:35:00 AM JST 2026 - US-001
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Verified .devcontainer/ directory structure exists at repository root
+- Verified devcontainer.json has valid JSON schema
+- Verified docker-compose.yml exists for multi-container orchestration
+- Fixed Dockerfile issue: uv --version was called before uv was installed
+  - Combined uv installation and version check into single RUN command
+- Verified Dockerfile builds successfully with docker build
+- Validated devcontainer.json and docker-compose.yml using Python json/yaml parsers
+- All 324 tests pass with uv run pytest
+- Ruff linting passes with uv run ruff check src/ tests/
+
+**Learnings for future iterations:**
+- Devcontainer structure uses: .devcontainer/devcontainer.json, .devcontainer/docker-compose.yml, .devcontainer/Dockerfile
+- Base image: mcr.microsoft.com/devcontainers/python:3.14
+- Python's json module validates JSON, PyYAML validates YAML structure
+- Dockerfile RUN commands should be combined when dependencies exist between them (pip install && uv --version)
+- Quality checks: `uv run ruff check src/ tests/` and `uv run pytest`
+- Pre-commit hooks automatically fix trailing whitespace and missing newlines
+
+---
