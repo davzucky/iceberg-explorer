@@ -32,7 +32,6 @@ from iceberg_explorer.query.models import (
     QueryCancelledError,
     QueryResult,
     QueryState,
-    QueryTimeoutError,
 )
 
 
@@ -372,17 +371,16 @@ class TestQueryCancellation:
             except QueryCancelledError:
                 cancel_triggered.set()
 
-        with patch.object(executor, "_execute_query") as mock_exec:
-            result = QueryResult(sql="SELECT 1")
-            result.set_running()
+        result = QueryResult(sql="SELECT 1")
+        result.set_running()
 
-            with executor._lock:
-                executor._active_queries[result.query_id] = result
-                executor._cancel_flags[result.query_id] = threading.Event()
+        with executor._lock:
+            executor._active_queries[result.query_id] = result
+            executor._cancel_flags[result.query_id] = threading.Event()
 
-            success = executor.cancel(result.query_id)
-            assert success
-            assert result.state == QueryState.CANCELLED
+        success = executor.cancel(result.query_id)
+        assert success
+        assert result.state == QueryState.CANCELLED
 
 
 class TestGlobalExecutor:
@@ -458,7 +456,7 @@ class TestQueryExecutorIntegration:
         """Test failed query records error message."""
         executor = QueryExecutor(engine=mock_engine)
 
-        with pytest.raises(Exception):
+        with pytest.raises((duckdb.Error, RuntimeError)):
             executor.execute("SELECT * FROM nonexistent_table_xyz")
 
         status = executor.get_status(list(executor._active_queries.keys())[0])
