@@ -29,7 +29,7 @@
       }
     }
   },
-  "postCreateCommand": "uv sync --all-extras",
+  "postCreateCommand": "uv sync --all-extras && uv run python /workspace/scripts/seed_data.py",
   "containerEnv": {
     "ICEBERG_EXPLORER_CATALOG__TYPE": "rest",
     "ICEBERG_EXPLORER_CATALOG__URI": "http://lakekeeper:8181/catalog",
