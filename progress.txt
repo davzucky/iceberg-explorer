@@ -16,3 +16,25 @@ Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
 - Pre-commit hooks are in .pre-commit-config.yaml
 - Source code is organized in src/iceberg_explorer/ with api/, models/, query/ subdirectories
 - Tests are in tests/ directory matching source structure with test_ prefix
+
+---
+## 2026-01-16 - US-002
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Verified all acceptance criteria for US-002 (Configuration System) are met
+- Config loads from JSON file via ICEBERG_EXPLORER_CONFIG env var
+- Env var overrides supported with ICEBERG_EXPLORER_ prefix (double underscore for nested)
+- Pydantic models created: CatalogConfig, QueryConfig, DuckDBConfig, ServerConfig, ExportConfig, OTelConfig, Settings
+- Both REST and local catalog types supported via CatalogType enum
+- DuckDB memory limit and threads limits configurable in DuckDBConfig
+- All optional settings have sensible defaults
+- 21 config tests cover loading and validation
+- All 324 tests pass
+- Code has type hints
+
+**Learnings for future iterations:**
+- Config system uses pydantic-settings with nested settings
+- Env vars use ICEBERG_EXPLORER_ prefix with double underscore for nested values (e.g., ICEBERG_EXPLORER_QUERY__MAX_ROWS)
+- Settings are cached globally via _settings variable
+- Use reset_settings() in tests to clear cache
+- JSON config file values are overridden by env vars
+---
