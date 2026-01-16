@@ -1,0 +1,18 @@
+## 2026-01-16 - US-001
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Verified all acceptance criteria for US-001 (Project Setup and Configuration) are met
+- Confirmed pyproject.toml has FastAPI, DuckDB, Granian dependencies configured
+- Verified source code structure in src/iceberg_explorer/
+- Confirmed pre-commit hooks configured (ruff, pyupgrade)
+- Verified project uses uv for dependency management
+- All 324 tests pass with uv run pytest
+- Ruff linting passes with uv run ruff check src/
+- Code has type hints and Pydantic validation
+
+**Learnings for future iterations:**
+- This project uses uv for dependency management (not npm/pnpm)
+- Quality checks: `uv run ruff check src/ tests/` and `uv run pytest`
+- Typechecking is handled via Pydantic models and type hints (no mypy/pyright configured)
+- Pre-commit hooks are in .pre-commit-config.yaml
+- Source code is organized in src/iceberg_explorer/ with api/, models/, query/ subdirectories
+- Tests are in tests/ directory matching source structure with test_ prefix
