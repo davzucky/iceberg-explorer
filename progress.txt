@@ -109,3 +109,27 @@ Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
 - Depends on chain: app -> lakekeeper -> postgres ensures correct startup order
 
 ---
+
+## Fri Jan 17 01:30:00 AM JST 2026 - US-005
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Added containerEnv section to devcontainer.json for environment variables
+- Set ICEBERG_EXPLORER_CATALOG__TYPE=rest
+- Set ICEBERG_EXPLORER_CATALOG__URI=http://lakekeeper:8181/catalog
+- Set ICEBERG_EXPLORER_CATALOG__WAREHOUSE=demo
+- Set AWS_ACCESS_KEY_ID=minioadmin for MinIO access
+- Set AWS_SECRET_ACCESS_KEY=minioadmin for MinIO access
+- Set AWS_ENDPOINT_URL=http://minio:9000 for MinIO endpoint
+- Set AWS_REGION=us-east-1 for S3 region
+- Added port 9001 to forwardPorts for MinIO console access
+- Validated devcontainer.json JSON structure
+- Quality checks: ruff and pytest pass
+
+**Learnings for future iterations:**
+- containerEnv in devcontainer.json sets environment variables in the app container
+- Environment variables are available to all processes running in the container
+- forwardPorts array defines ports forwarded from container to host for development
+- Iceberg Explorer uses double underscore for nested config (ICEBERG_EXPLORER_CATALOG__URI)
+- AWS credentials and endpoint must match MinIO configuration for PyIceberg/DuckDB to work
+- Lakekeeper catalog path is /catalog, not root (http://lakekeeper:8181/catalog)
+
+---

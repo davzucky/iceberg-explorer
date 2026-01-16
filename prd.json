@@ -79,7 +79,7 @@
         "Application starts without manual configuration"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
