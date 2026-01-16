@@ -84,6 +84,87 @@ Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
 - OpenTelemetry spans automatically created for queries with attributes: db.system, db.operation, query.id, query.timeout_seconds
 - Executor is cached globally via _executor variable
 - Use reset_executor() in tests to clear cache
+
+---
+## 2026-01-16 - US-005
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Verified all acceptance criteria for US-005 (List Namespaces Endpoint) are met
+- GET /api/v1/catalog/namespaces returns top-level namespace list
+- GET /api/v1/catalog/namespaces?parent={ns} returns child namespaces
+- Parent parameter uses unit separator (%1F) for multi-level namespaces
+- Namespaces returned as arrays of arrays (list[list[str]])
+- Pagination supported with page-token and page-size params
+- Returns 404 if parent namespace doesn't exist
+- Empty list for catalogs with no namespaces
+- Integration tests with nested namespace hierarchy
+- All 324 tests pass
+- Code has type hints
+
+**Learnings for future iterations:**
+- _parse_namespace() in utils handles unit separator (\x1f) decoding
+- _build_namespace_path() constructs fully qualified SQL identifiers
+- Filters out system namespaces: main, information_schema, pg_catalog
+- Parent validation queries parent's information_schema.schemata
+- Pagination tokens accepted but not yet implemented
+
+---
+## 2026-01-16 - US-006
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Verified all acceptance criteria for US-006 (List Tables Endpoint) are met
+- GET /api/v1/catalog/namespaces/{namespace}/tables returns table list
+- Namespace path uses unit separator for multi-level
+- Return table identifiers as {namespace: [...], name: "table_name"}
+- Returns 404 for non-existent namespace
+- Integration tests with sample tables
+- All 324 tests pass
+- Code has type hints
+
+**Learnings for future iterations:**
+- list_tables() uses _parse_namespace() to decode namespace path
+- Returns TableIdentifier objects with namespace and name fields
+- Validates namespace exists via information_schema.schemata query
+- Filters tables from information_schema.tables with table_schema filter
+
+---
+## 2026-01-16 - US-007
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Verified all acceptance criteria for US-007 (Table Details Endpoint) are met
+- GET /api/v1/catalog/tables/{namespace}.{table} returns details
+- Includes: location, format, partition spec, sort order, current snapshot
+- Returns snapshot history (list of snapshots with timestamps)
+- Returns 404 for non-existent table
+- Integration tests verifying all metadata fields
+- All 324 tests pass
+- Code has type hints
+
+**Learnings for future iterations:**
+- get_table_details() uses _parse_table_path() to extract namespace and table name
+- Fetches snapshots via iceberg_snapshots() function
+- Handles timestamp conversion (datetime objects, strings, integers)
+- current_snapshot is the one with max sequence_number
+- Location extracted from manifest_path or falls back to S3 pattern
+- Partition spec and sort order returned as None (not yet implemented)
+
+---
+## 2026-01-16 - US-008
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Verified all acceptance criteria for US-008 (Table Schema Endpoint) are met
+- GET /api/v1/catalog/tables/{namespace}.{table}/schema returns schema
+- Include column name, type, field ID, nullable flag
+- Mark partition columns with indicator
+- Include column statistics if available (currently None)
+- Integration tests with various column types
+- All 324 tests pass
+- Code has type hints
+
+**Learnings for future iterations:**
+- get_table_schema() queries information_schema.columns
+- Extracts partition columns from iceberg_metadata()
+- Filters partition metadata from "partition_value" or "partition" columns
+- SchemaField includes field_id, name, type, nullable, is_partition_column
+- Column statistics returned but not yet populated
+- is_nullable determined from information_schema.columns.is_nullable field
+---
 ---
 ---
 ---
