@@ -25,3 +25,26 @@ Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
 - Pre-commit hooks automatically fix trailing whitespace and missing newlines
 
 ---
+
+## Fri Jan 17 00:45:00 AM JST 2026 - US-002
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Verified dev container uses Python 3.14 base image (FROM mcr.microsoft.com/devcontainers/python:3.14)
+- Verified uv package manager is installed and added to PATH (RUN pip install uv, ENV PATH)
+- Verified project dependencies install command is configured (postCreateCommand: uv sync --all-extras)
+- Verified uv run iceberg-explorer starts application successfully
+  - Tested by starting app in background, confirmed it listens on port 8080
+  - App stops cleanly with SIGTERM
+- Verified uv run pytest runs tests successfully (324 tests pass)
+- Verified container has /workspace mounted to project root (workspaceFolder: /workspace, volumes mount)
+- All existing devcontainer configuration met acceptance criteria - no changes needed
+- Quality checks: ruff and pytest pass
+
+**Learnings for future iterations:**
+- App server runs on port 8080 by default (config.ServerConfig.port)
+- uv run iceberg-explorer uses uvicorn.run() which blocks and keeps server running
+- To verify app starts without hanging: run in background with subprocess.Popen(), check process status, then send SIGTERM
+- postCreateCommand in devcontainer.json runs after container is created
+- workspaceFolder in devcontainer.json sets the container's working directory
+- Docker Compose volumes mount the workspace: "../..:/workspace:cached"
+
+---
