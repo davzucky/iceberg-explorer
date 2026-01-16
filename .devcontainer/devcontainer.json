@@ -34,6 +34,7 @@
     "ICEBERG_EXPLORER_CATALOG__TYPE": "rest",
     "ICEBERG_EXPLORER_CATALOG__URI": "http://lakekeeper:8181/catalog",
     "ICEBERG_EXPLORER_CATALOG__WAREHOUSE": "demo",
+    "ICEBERG_EXPLORER_SERVER__PORT": "8000",
     "AWS_ACCESS_KEY_ID": "minioadmin",
     "AWS_SECRET_ACCESS_KEY": "minioadmin",
     "AWS_ENDPOINT_URL": "http://minio:9000",
