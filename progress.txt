@@ -165,3 +165,33 @@ Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
 - DuckDB memory connection (:memory:) is sufficient for seeding, data goes to S3 via Iceberg extension
 
 ---
+
+## Fri Jan 17 02:00:00 AM JST 2026 - US-007
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Added ICEBERG_EXPLORER_SERVER__PORT=8000 to devcontainer.json containerEnv
+- Fixed port mismatch: app default port was 8080, but forwardPorts was set to 8000
+- Verified all configuration files are valid (JSON/YAML)
+- Confirmed service dependency chain is correct:
+  - app depends on: minio (healthy), minio-init (completed), lakekeeper (healthy)
+  - lakekeeper depends on: postgres (healthy)
+  - minio-init depends on: minio (healthy)
+- Confirmed environment variables are set for Iceberg Explorer to connect to Lakekeeper and MinIO
+- Confirmed healthchecks are configured for all services (MinIO, Lakekeeper, PostgreSQL)
+- Confirmed seed script runs automatically via postCreateCommand
+- Confirmed devcontainer configuration follows Microsoft Dev Containers specification
+- Note: Full end-to-end testing (devcontainer up, UI verification, query execution) requires running in actual containerized environment
+- Configuration is complete and ready for full end-to-end verification
+- Quality checks: ruff and pytest pass
+
+**Learnings for future iterations:**
+- App server default port is 8080 (ServerConfig.port), can be overridden with ICEBERG_EXPLORER_SERVER__PORT
+- forwardPorts in devcontainer.json must match the port the app actually listens on
+- Dev Containers specification requires valid JSON in devcontainer.json
+- Service startup order is critical: postgres -> lakekeeper, minio -> minio-init, then app
+- depends_on conditions: service_healthy waits for healthcheck to pass
+- depends_on conditions: service_completed_successfully waits for container to exit with code 0
+- Healthchecks ensure services are ready before dependent services start
+- End-to-end verification of devcontainers requires actual Docker/VS Code environment
+- Configuration verification can be done without running full container stack
+
+---

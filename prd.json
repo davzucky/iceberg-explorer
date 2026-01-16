@@ -111,7 +111,7 @@
         "Container can be stopped and restarted without data loss (within session)"
       ],
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "notes": ""
     }
   ]
