@@ -14,6 +14,8 @@ services:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
+      lakekeeper:
+        condition: service_healthy
     environment:
       - DEVELOPMENT=true
 
@@ -46,3 +48,42 @@ services:
       /usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadmin &&
       /usr/bin/mc mb myminio/iceberg-warehouse --ignore-existing
       "
+
+  postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=iceberg
+      - POSTGRES_PASSWORD=iceberg
+      - POSTGRES_DB=lakekeeper
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U iceberg -d lakekeeper"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  lakekeeper:
+    image: lakekeeper/lakekeeper:latest
+    ports:
+      - "8181:8181"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - LAKEKEEPER__CATALOG__URI=postgresql://iceberg:iceberg@postgres:5432/lakekeeper
+      - LAKEKEEPER__WAREHOUSE__LOCATION=s3://iceberg-warehouse
+      - LAKEKEEPER__WAREHOUSE__NAME=demo
+      - LAKEKEEPER__WAREHOUSE__S3__ENDPOINT=http://minio:9000
+      - LAKEKEEPER__WAREHOUSE__S3__ACCESS_KEY=minioadmin
+      - LAKEKEEPER__WAREHOUSE__S3__SECRET_KEY=minioadmin
+      - LAKEKEEPER__WAREHOUSE__S3__PATH_STYLE_ACCESS=true
+    command: catalog
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8181/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres-data:
