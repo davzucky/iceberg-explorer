@@ -314,5 +314,133 @@ Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
 - record_query_duration() and record_query_rows() record metrics with status labels
 - setup_opentelemetry() is idempotent (returns if _initialized)
 - Use reset_observability() in tests to clear state
+
+---
+## 2026-01-16 - US-014
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Verified all acceptance criteria for US-014 (Base Layout and Navigation) are met
+- Base HTML template with header, sidebar, main content
+- Tailwind CSS for styling (via CDN with custom iceberg colors)
+- HTMX loaded for dynamic updates (from unpkg CDN)
+- Alpine.js loaded for client-side interactivity (deferred load from unpkg)
+- Responsive design (works on tablet+ - mobile sidebar toggle, hidden md:flex nav)
+- All 324 tests pass
+- Code has type hints
+
+**Learnings for future iterations:**
+- base.html extends Jinja2 blocks for title, nav_home, nav_query, sidebar, content, head, scripts
+- Tailwind configured with custom iceberg colors in script block
+- Health status checks /health endpoint every 30s via HTMX
+- Sidebar uses Alpine x-data="{ sidebarOpen: true }" for mobile toggle
+- HTMX indicators use htmx-indicator class with opacity transitions
+
+---
+## 2026-01-16 - US-015
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Verified all acceptance criteria for US-015 (Namespace Tree Browser) are met
+- Sidebar shows namespace tree via /ui/partials/namespace-tree
+- Click namespace to expand/collapse (lazy load via HTMX hx-get with click once trigger)
+- Tables shown as leaf nodes under namespaces (in namespace_children.html)
+- Click table to load details in main panel (hx-target="#main-content")
+- Loading indicator during fetch (htmx-indicator spans with spinning SVG)
+- All 324 tests pass
+- Code has type hints
+
+**Learnings for future iterations:**
+- Namespace tree uses Alpine x-data="{ expanded: false }" for state
+- Chevron rotates 90deg when expanded
+- hx-get="/ui/partials/namespace-children?parent={{ ns.encoded_path }}" loads children
+- hx-trigger="click once" ensures single load per expand
+- Namespace items have stable ID via _generate_id() (MD5 hash)
+- Tables show table icon, namespaces show folder icon
+- Loading uses SVG spinner with animate-spin class
+
+---
+## 2026-01-16 - US-016
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Verified all acceptance criteria for US-016 (Table Details View) are met
+- Main panel shows selected table metadata via /ui/partials/table-details
+- Tabs for: Overview, Schema, Snapshots (Alpine x-data="{ activeTab: 'overview' }")
+- Overview: location, format, partitioning, columns, snapshots, current snapshot
+- Schema: searchable column list with type badges and nullable indicators
+- Snapshots: list with timestamps (current snapshot highlighted)
+- HTMX partial updates when switching tabs (Alpine x-show/x-cloak)
+- All 324 tests pass
+- Code has type hints
+
+**Learnings for future iterations:**
+- Tab buttons use :class binding to show active border/color
+- Schema tab has x-data="{ searchQuery: '' }" for filtering
+- Search uses .includes() to match column name or type (case insensitive)
+- Partition columns marked with purple badge
+- Column types shown in blue badges
+- Nullable columns show "Yes" in gray, "No" in red
+- Timestamps formatted with Alpine x-text="new Date(...).toLocaleString()"
+- Snapshots reversed to show newest first
+
+---
+## 2026-01-16 - US-017
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Verified all acceptance criteria for US-017 (SQL Query Editor) are met
+- Monaco editor with SQL syntax highlighting (loaded from cdnjs)
+- Run button executes query via Alpine @click="executeQuery()"
+- Timeout selector (dropdown: 30s, 60s, 5m, 15m, 1h) - x-model="timeout"
+- Cancel button visible during execution (x-show="isExecuting")
+- Error messages displayed clearly (x-show="error" with dismiss button)
+- All 324 tests pass
+- Code has type hints
+
+**Learnings for future iterations:**
+- Monaco editor requires CDN loader script and require.config()
+- Editor value synced with Alpine sql variable via onDidChangeModelContent
+- Keyboard shortcut: Ctrl/Cmd+Enter to execute query (via addCommand)
+- Run button shows "Running..." spinner when isExecuting
+- Cancel button posts to /api/v1/query/${queryId}/cancel
+- Status polls /api/v1/query/${queryId}/status every 500ms
+- Status states: pending, running, completed, failed, cancelled
+- Error display has red background with dismiss button
+
+---
+## 2026-01-16 - US-018
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Verified all acceptance criteria for US-018 (Query Results Table) are met
+- Results displayed in scrollable table with sticky headers
+- Column headers clickable for sorting (Alpine @click="toggleSort(colIndex)")
+- Per-column filter inputs (text and numeric range like ">100", "<=20")
+- Pagination controls (page size selector, prev/next, current/total pages)
+- Row count and execution time displayed
+- Streaming indicator during data fetch (x-show="isStreaming")
+- All 324 tests pass
+- Code has type hints
+
+**Learnings for future iterations:**
+- Results table uses Alpine reactive data: columns, allRows, filteredRows, paginatedRows
+- Sort state: sortColumn, sortDirection (third click removes sort)
+- Filter inputs use x-model="columnFilters[colIndex]" with @input to apply
+- Numeric range filters support: >, <, >=, <= operators
+- Pagination: pageSize (100/250/500/1000), currentPage, totalPages computed
+- Fetches from /api/v1/query/${queryId}/results?page_size=1000
+- Parses JSON lines: metadata, data, progress, complete
+- Sticky headers: position: sticky, z-index: 10 for th, z-index: 9 for filter row
+
+---
+## 2026-01-16 - US-019
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Verified all acceptance criteria for US-019 (CSV Export Button) are met
+- Export button in results toolbar (x-show="columns.length > 0 && queryId")
+- Shows progress for large exports (isExporting state with spinner)
+- Downloads file with appropriate name (from Content-Disposition header)
+- Disabled when no results available (disabled when isExecuting || !queryId)
+- All 324 tests pass
+- Code has type hints
+
+**Learnings for future iterations:**
+- Export button posts to /api/v1/export/csv with query_id
+- Shows "Exporting..." spinner when isExporting
+- Creates Blob from response.blob() and triggers download via anchor tag
+- Extracts filename from Content-Disposition header with regex
+- Uses window.URL.createObjectURL/revokeObjectURL for cleanup
+- Downloads in browser, not streaming to disk directly
+---
 ---
 ---
