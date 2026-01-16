@@ -244,8 +244,75 @@ Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
 - Calls executor.cancel() which uses threading.Event and conn.interrupt()
 - Returns 404 if query not found
 - Returns 400 if query_id is invalid UUID format
+
 ---
+## 2026-01-16 - US-013
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Verified all acceptance criteria for US-013 (CSV Export Endpoint) are met
+- POST /api/v1/export/csv accepts query_id or inline SQL
+- Stream CSV as chunked download
+- Configurable max size (default 1GB)
+- Proper Content-Disposition header with filename
+- Handle large exports without memory issues (8KB chunks)
+- Integration tests with various data types
+- All 324 tests pass
+- Code has type hints
+
+**Learnings for future iterations:**
+- export_csv() validates that either query_id or sql is provided, not both
+- _format_value() handles None, bool, datetime, bytes, Arrow types
+- _stream_csv() is an async generator yielding byte chunks
+- Waits up to 1 hour for query completion
+- Sanitizes filename for cross-platform and HTTP header safety
+- Buffer size is 8192 bytes before yielding
+- Tracks bytes_written to enforce max_size_bytes limit
+- Custom filename defaults to "export_{query_uuid}" if not provided
+
 ---
+## 2026-01-16 - US-020
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Verified all acceptance criteria for US-020 (Health and Readiness Endpoints) are met
+- GET /health returns status, version, component health
+- GET /ready returns readiness for traffic
+- Check DuckDB connectivity in health
+- Check catalog connectivity in health
+- Return 503 if unhealthy
+- Unit tests for health logic
+- All 324 tests pass
+- Code has type hints
+
+**Learnings for future iterations:**
+- health_check() returns HealthResponse with status (healthy/degraded/unhealthy)
+- Status is "healthy" if both components healthy, "degraded" if at least one healthy, "unhealthy" if none
+- Sets response.status_code = 503 when not healthy or degraded
+- readiness_check() returns ReadyResponse with ready flag
+- Both endpoints use engine.health_check() which checks DuckDB and catalog
+- ComponentHealth has healthy bool and optional error string
+
 ---
+## 2026-01-16 - US-021
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Verified all acceptance criteria for US-021 (OpenTelemetry Instrumentation) are met
+- OpenTelemetry SDK integrated with auto-instrumentation
+- FastAPI routes automatically traced via FastAPIInstrumentor
+- DuckDB query spans with duration and row count attributes
+- Metrics: query_duration_seconds, query_rows_returned, active_queries
+- Configurable OTLP exporter endpoint from settings
+- Service name set to iceberg-explorer from settings
+- Structured JSON logs with trace context (trace_id, span_id)
+- No sensitive data in logs (SQL not logged)
+- Integration tests verifying traces and metrics emitted
+- All 324 tests pass
+- Code has type hints
+
+**Learnings for future iterations:**
+- setup_opentelemetry() initializes tracer and meter providers with OTLP exporters
+- PeriodicExportingMetricReader exports metrics every 10 seconds
+- FastAPIInstrumentor.instrument_app() auto-instruments all routes
+- _add_trace_context() adds trace_id and span_id to all log records
+- Use increment/decrement_active_queries() to track active query count
+- record_query_duration() and record_query_rows() record metrics with status labels
+- setup_opentelemetry() is idempotent (returns if _initialized)
+- Use reset_observability() in tests to clear state
 ---
 ---
