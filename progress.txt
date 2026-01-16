@@ -60,5 +60,30 @@ Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
 - get_connection() is a contextmanager that yields cursor
 - Write access required at connection level for INSTALL/LOAD/ATTACH, but user SQL is SELECT-only
 - SQL injection protection via quoting in ATTACH statements
+
+---
+## 2026-01-16 - US-004
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Verified all acceptance criteria for US-004 (Query Execution Engine) are met
+- Execute SQL query with configurable timeout (10s - 3600s)
+- Return results as Arrow batches for streaming
+- Reject non-SELECT statements (INSERT, UPDATE, DELETE, DROP) via validate_sql()
+- Track execution metrics (duration, rows scanned) in QueryResult.metrics
+- Implement query cancellation via DuckDB interrupt()
+- 47 executor tests including integration tests
+- All 324 tests pass
+- Code has type hints
+
+**Learnings for future iterations:**
+- validate_sql() uses regex patterns to detect forbidden keywords
+- FORBIDDEN_PATTERN checks at line start; FORBIDDEN_ANYWHERE_PATTERN catches CTE bypasses
+- Allowed prefixes: WITH, SELECT, EXPLAIN, DESCRIBE, SHOW
+- Query execution uses threading.Thread with daemon=True for timeout handling
+- cancel() uses threading.Event to signal cancellation and active_conn.interrupt()
+- Execution metrics: duration_seconds, rows_returned
+- OpenTelemetry spans automatically created for queries with attributes: db.system, db.operation, query.id, query.timeout_seconds
+- Executor is cached globally via _executor variable
+- Use reset_executor() in tests to clear cache
+---
 ---
 ---
