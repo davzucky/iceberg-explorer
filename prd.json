@@ -47,7 +47,7 @@
         "MinIO healthcheck passes before dependent services start"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {

@@ -48,3 +48,31 @@ Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
 - Docker Compose volumes mount the workspace: "../..:/workspace:cached"
 
 ---
+
+## Fri Jan 17 01:00:00 AM JST 2026 - US-003
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Added MinIO service to docker-compose.yml using minio/minio:latest image
+- Configured MinIO ports: 9000 (S3 API), 9001 (console)
+- Set MinIO credentials: minioadmin/minioadmin (via MINIO_ROOT_USER and MINIO_ROOT_PASSWORD)
+- Added MinIO healthcheck: curl http://localhost:9000/minio/health/live
+- Created minio-init init container to automatically create iceberg-warehouse bucket on startup
+  - Uses minio/mc:latest image with MinIO client
+  - Depends on MinIO service becoming healthy (condition: service_healthy)
+  - Runs mc alias set to configure MinIO endpoint
+  - Runs mc mb to create iceberg-warehouse bucket with --ignore-existing flag
+- Updated app service to depend on MinIO health and minio-init completion
+  - depends_on minio with condition: service_healthy
+  - depends_on minio-init with condition: service_completed_successfully
+- Validated docker-compose.yml with PyYAML and docker-compose config
+- Quality checks: ruff and pytest pass
+
+**Learnings for future iterations:**
+- MinIO healthcheck uses docker-compose v3 syntax: test, interval, timeout, retries
+- Use depends_on with condition: service_healthy to wait for healthcheck to pass
+- Use depends_on with condition: service_completed_successfully to wait for init container to finish
+- Init containers should exit after completing their task (not loop indefinitely)
+- MinIO client (mc) syntax: mc alias set <alias> <endpoint> <user> <password>
+- mc mb <alias>/<bucket> --ignore-existing creates bucket without error if it exists
+- network_mode: service:minio makes the app share MinIO's network namespace
+
+---
