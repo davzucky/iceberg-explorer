@@ -95,7 +95,7 @@
         "Seeding completes before VS Code attaches or returns success"
       ],
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {

@@ -133,3 +133,35 @@ Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
 - Lakekeeper catalog path is /catalog, not root (http://lakekeeper:8181/catalog)
 
 ---
+
+## Fri Jan 17 01:45:00 AM JST 2026 - US-006
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Created seed_data.py script in /workspace/scripts/ directory
+- Script uses DuckDB with Iceberg extension to create and populate tables
+- Connects to Lakekeeper REST catalog (http://lakekeeper:8181/catalog)
+- Attaches to S3 warehouse (s3://iceberg-warehouse/demo)
+- Creates 2 namespaces: nyc, sales
+- Creates 4 tables total:
+  - nyc.taxi_trips: 150 rows (taxi trip data with multiple columns)
+  - nyc.zones: 120 rows (taxi zone data)
+  - sales.orders: 180 rows (order data with customer info, dates, regions)
+  - sales.products: 150 rows (product catalog)
+- Total rows: 600 (exceeds minimum of 100 per table)
+- Implements idempotency: checks if nyc.taxi_trips table exists before seeding
+- Uses CREATE SCHEMA IF NOT EXISTS and CREATE OR REPLACE TABLE for safety
+- Updated devcontainer.json postCreateCommand to run seed script after uv sync
+- postCreateCommand now: "uv sync --all-extras && uv run python /workspace/scripts/seed_data.py"
+- Script waits for Lakekeeper to be ready (attached in same docker-compose dependency chain)
+- Quality checks: ruff and pytest pass
+
+**Learnings for future iterations:**
+- DuckDB Iceberg extension syntax: INSTALL iceberg; LOAD iceberg; ATTACH ... AS iceberg (TYPE=iceberg)
+- S3 warehouse path format: s3://bucket-name/warehouse-name for Lakekeeper
+- Idempotency check: SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = ?
+- postCreateCommand can chain multiple commands with && operator
+- Seed script must wait for dependent services (Lakekeeper, MinIO) to be healthy
+- DuckDB INSERT with multiple rows using executemany() is efficient
+- time.sleep() calls between operations ensure metadata propagates through catalog
+- DuckDB memory connection (:memory:) is sufficient for seeding, data goes to S3 via Iceberg extension
+
+---
