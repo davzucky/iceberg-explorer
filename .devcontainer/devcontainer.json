@@ -30,8 +30,17 @@
     }
   },
   "postCreateCommand": "uv sync --all-extras",
+  "containerEnv": {
+    "ICEBERG_EXPLORER_CATALOG__TYPE": "rest",
+    "ICEBERG_EXPLORER_CATALOG__URI": "http://lakekeeper:8181/catalog",
+    "ICEBERG_EXPLORER_CATALOG__WAREHOUSE": "demo",
+    "AWS_ACCESS_KEY_ID": "minioadmin",
+    "AWS_SECRET_ACCESS_KEY": "minioadmin",
+    "AWS_ENDPOINT_URL": "http://minio:9000",
+    "AWS_REGION": "us-east-1"
+  },
   "remoteUser": "vscode",
-  "forwardPorts": [8000],
+  "forwardPorts": [8000, 9001],
   "portsAttributes": {
     "8000": {
       "label": "Iceberg Explorer",
