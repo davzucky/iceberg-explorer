@@ -249,26 +249,17 @@ class TestHelperFunctions:
 class TestListTablesEndpoint:
     """Tests for GET /api/v1/catalog/namespaces/{namespace}/tables endpoint."""
 
-    def test_list_tables_in_namespace(self, client: TestClient, mock_engine: MagicMock):
+    def test_list_tables_in_namespace(self, client: TestClient, mock_catalog_service: MagicMock):
         """Test listing tables in a namespace."""
-        mock_conn = MagicMock()
+        mock_catalog_service.list_tables.return_value = [
+            "accounting.transactions",
+            "accounting.users",
+        ]
 
-        def mock_execute(sql, _params=None):
-            result = MagicMock()
-            if "LIMIT 1" in sql:
-                result.fetchall.return_value = [(1,)]
-            else:
-                result.fetchall.return_value = [
-                    ("transactions",),
-                    ("users",),
-                ]
-            return result
-
-        mock_conn.execute.side_effect = mock_execute
-        mock_engine.get_connection.return_value.__enter__.return_value = mock_conn
-        mock_engine.get_connection.return_value.__exit__.return_value = None
-
-        with patch("iceberg_explorer.api.routes.catalog.get_engine", return_value=mock_engine):
+        with patch(
+            "iceberg_explorer.api.routes.catalog.get_catalog_service",
+            return_value=mock_catalog_service,
+        ):
             response = client.get("/api/v1/catalog/namespaces/accounting/tables")
 
         assert response.status_code == 200
@@ -279,47 +270,33 @@ class TestListTablesEndpoint:
         assert data["identifiers"][0]["name"] == "transactions"
         assert data["identifiers"][1]["namespace"] == ["accounting"]
         assert data["identifiers"][1]["name"] == "users"
+        mock_catalog_service.list_tables.assert_called_once_with("accounting")
 
-    def test_list_tables_empty_namespace(self, client: TestClient, mock_engine: MagicMock):
+    def test_list_tables_empty_namespace(self, client: TestClient, mock_catalog_service: MagicMock):
         """Test listing tables when namespace has no tables."""
-        mock_conn = MagicMock()
+        mock_catalog_service.list_tables.return_value = []
 
-        def mock_execute(sql, _params=None):
-            result = MagicMock()
-            if "LIMIT 1" in sql:
-                result.fetchall.return_value = [(1,)]
-            else:
-                result.fetchall.return_value = []
-            return result
-
-        mock_conn.execute.side_effect = mock_execute
-        mock_engine.get_connection.return_value.__enter__.return_value = mock_conn
-        mock_engine.get_connection.return_value.__exit__.return_value = None
-
-        with patch("iceberg_explorer.api.routes.catalog.get_engine", return_value=mock_engine):
+        with patch(
+            "iceberg_explorer.api.routes.catalog.get_catalog_service",
+            return_value=mock_catalog_service,
+        ):
             response = client.get("/api/v1/catalog/namespaces/empty_ns/tables")
 
         assert response.status_code == 200
         data = response.json()
         assert data["identifiers"] == []
+        mock_catalog_service.list_tables.assert_called_once_with("empty_ns")
 
-    def test_list_tables_nested_namespace(self, client: TestClient, mock_engine: MagicMock):
+    def test_list_tables_nested_namespace(
+        self, client: TestClient, mock_catalog_service: MagicMock
+    ):
         """Test listing tables in a nested namespace using unit separator."""
-        mock_conn = MagicMock()
+        mock_catalog_service.list_tables.return_value = ["accounting.tax.tax_records"]
 
-        def mock_execute(sql, _params=None):
-            result = MagicMock()
-            if "LIMIT 1" in sql:
-                result.fetchall.return_value = [(1,)]
-            else:
-                result.fetchall.return_value = [("tax_records",)]
-            return result
-
-        mock_conn.execute.side_effect = mock_execute
-        mock_engine.get_connection.return_value.__enter__.return_value = mock_conn
-        mock_engine.get_connection.return_value.__exit__.return_value = None
-
-        with patch("iceberg_explorer.api.routes.catalog.get_engine", return_value=mock_engine):
+        with patch(
+            "iceberg_explorer.api.routes.catalog.get_catalog_service",
+            return_value=mock_catalog_service,
+        ):
             response = client.get("/api/v1/catalog/namespaces/accounting%1Ftax/tables")
 
         assert response.status_code == 200
@@ -327,38 +304,36 @@ class TestListTablesEndpoint:
         assert len(data["identifiers"]) == 1
         assert data["identifiers"][0]["namespace"] == ["accounting", "tax"]
         assert data["identifiers"][0]["name"] == "tax_records"
+        mock_catalog_service.list_tables.assert_called_once_with("accounting.tax")
 
-    def test_list_tables_namespace_not_found(self, client: TestClient, mock_engine: MagicMock):
+    def test_list_tables_namespace_not_found(
+        self, client: TestClient, mock_catalog_service: MagicMock
+    ):
         """Test 404 when namespace doesn't exist."""
-        mock_conn = MagicMock()
-        mock_conn.execute.side_effect = Exception("Catalog Error: Schema with name does not exist")
-        mock_engine.get_connection.return_value.__enter__.return_value = mock_conn
-        mock_engine.get_connection.return_value.__exit__.return_value = None
+        from pyiceberg.exceptions import NoSuchNamespaceError
 
-        with patch("iceberg_explorer.api.routes.catalog.get_engine", return_value=mock_engine):
+        mock_catalog_service.list_tables.side_effect = NoSuchNamespaceError()
+
+        with patch(
+            "iceberg_explorer.api.routes.catalog.get_catalog_service",
+            return_value=mock_catalog_service,
+        ):
             response = client.get("/api/v1/catalog/namespaces/nonexistent/tables")
 
         assert response.status_code == 404
         data = response.json()
         assert "not found" in data["detail"].lower() or "Namespace" in data["detail"]
 
-    def test_list_tables_deeply_nested_namespace(self, client: TestClient, mock_engine: MagicMock):
+    def test_list_tables_deeply_nested_namespace(
+        self, client: TestClient, mock_catalog_service: MagicMock
+    ):
         """Test listing tables in a deeply nested namespace."""
-        mock_conn = MagicMock()
+        mock_catalog_service.list_tables.return_value = ["a.b.c.report"]
 
-        def mock_execute(sql, _params=None):
-            result = MagicMock()
-            if "LIMIT 1" in sql:
-                result.fetchall.return_value = [(1,)]
-            else:
-                result.fetchall.return_value = [("report",)]
-            return result
-
-        mock_conn.execute.side_effect = mock_execute
-        mock_engine.get_connection.return_value.__enter__.return_value = mock_conn
-        mock_engine.get_connection.return_value.__exit__.return_value = None
-
-        with patch("iceberg_explorer.api.routes.catalog.get_engine", return_value=mock_engine):
+        with patch(
+            "iceberg_explorer.api.routes.catalog.get_catalog_service",
+            return_value=mock_catalog_service,
+        ):
             response = client.get("/api/v1/catalog/namespaces/a%1Fb%1Fc/tables")
 
         assert response.status_code == 200
@@ -366,29 +341,31 @@ class TestListTablesEndpoint:
         assert len(data["identifiers"]) == 1
         assert data["identifiers"][0]["namespace"] == ["a", "b", "c"]
         assert data["identifiers"][0]["name"] == "report"
+        mock_catalog_service.list_tables.assert_called_once_with("a.b.c")
 
-    def test_list_tables_engine_initialization(self, client: TestClient, mock_engine: MagicMock):
-        """Test engine is initialized if not already."""
-        mock_engine.is_initialized = False
-        mock_conn = MagicMock()
+    def test_list_tables_multi_table_namespace(
+        self, client: TestClient, mock_catalog_service: MagicMock
+    ):
+        """Test listing multiple tables in a namespace."""
+        mock_catalog_service.list_tables.return_value = [
+            "sales.orders",
+            "sales.customers",
+            "sales.products",
+        ]
 
-        def mock_execute(sql, _params=None):
-            result = MagicMock()
-            if "LIMIT 1" in sql:
-                result.fetchall.return_value = [(1,)]
-            else:
-                result.fetchall.return_value = []
-            return result
-
-        mock_conn.execute.side_effect = mock_execute
-        mock_engine.get_connection.return_value.__enter__.return_value = mock_conn
-        mock_engine.get_connection.return_value.__exit__.return_value = None
-
-        with patch("iceberg_explorer.api.routes.catalog.get_engine", return_value=mock_engine):
-            response = client.get("/api/v1/catalog/namespaces/test/tables")
+        with patch(
+            "iceberg_explorer.api.routes.catalog.get_catalog_service",
+            return_value=mock_catalog_service,
+        ):
+            response = client.get("/api/v1/catalog/namespaces/sales/tables")
 
         assert response.status_code == 200
-        mock_engine.initialize.assert_called_once()
+        data = response.json()
+        assert len(data["identifiers"]) == 3
+        assert data["identifiers"][0]["name"] == "orders"
+        assert data["identifiers"][1]["name"] == "customers"
+        assert data["identifiers"][2]["name"] == "products"
+        mock_catalog_service.list_tables.assert_called_once_with("sales")
 
 
 class TestTableIdentifierModel:

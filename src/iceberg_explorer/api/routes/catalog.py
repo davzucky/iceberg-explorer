@@ -119,10 +119,9 @@ async def list_tables(
     Raises:
         HTTPException: 404 if namespace doesn't exist.
     """
-    engine = get_engine()
+    from pyiceberg.exceptions import NoSuchNamespaceError
 
-    if not engine.is_initialized:
-        engine.initialize()
+    catalog_service = get_catalog_service()
 
     namespace_parts = _parse_namespace(namespace)
     if not namespace_parts:
@@ -131,34 +130,21 @@ async def list_tables(
             detail="Namespace cannot be empty",
         )
 
-    catalog_name = engine.catalog_name
+    namespace_str = ".".join(namespace_parts)
 
-    with engine.get_connection() as conn:
-        namespace_path = _build_namespace_path(catalog_name, namespace_parts)
-        try:
-            conn.execute(f"SELECT * FROM {namespace_path}.information_schema.schemata LIMIT 1")
-        except Exception as e:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Namespace not found: {'.'.join(namespace_parts)}",
-            ) from e
+    try:
+        tables = catalog_service.list_tables(namespace_str)
+    except NoSuchNamespaceError as e:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Namespace not found: {'.'.join(namespace_parts)}",
+        ) from e
 
-        sql = f"SELECT table_name FROM {namespace_path}.information_schema.tables WHERE table_schema = ?"
-
-        try:
-            result = conn.execute(sql, [namespace_parts[-1]]).fetchall()
-        except Exception as e:
-            if "does not exist" in str(e).lower() or "not found" in str(e).lower():
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Namespace not found: {'.'.join(namespace_parts)}",
-                ) from e
-            raise
-
-        identifiers: list[TableIdentifier] = []
-        for row in result:
-            table_name = row[0]
-            identifiers.append(TableIdentifier(namespace=namespace_parts, name=table_name))
+    identifiers: list[TableIdentifier] = []
+    for table_identifier in tables:
+        table_parts = table_identifier.split(".")
+        table_name = table_parts[-1]
+        identifiers.append(TableIdentifier(namespace=namespace_parts, name=table_name))
 
     return ListTablesResponse(identifiers=identifiers)
 

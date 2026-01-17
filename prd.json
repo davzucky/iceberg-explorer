@@ -142,8 +142,8 @@
         "Typecheck passes"
       ],
       "priority": 9,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Updated endpoint to use CatalogService; removed all DuckDB table listing code; response format is backward compatible"
     },
     {
       "id": "US-010",
