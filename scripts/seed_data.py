@@ -160,8 +160,8 @@ def seed_database() -> None:
                 (
                     i + 1,
                     (i % 50) + 1,
-                    datetime(2026, 1, 1 + (i % 30), 1 + (i % 28), 1).date(),
-                    datetime(2026, 1, 2 + (i % 30), 1 + (i % 28), 1).date(),
+                    datetime(2026, 1, 1 + (i % 30), i % 24, 1).date(),
+                    datetime(2026, 1, 2 + (i % 30), i % 24, 1).date(),
                     "Standard Class"
                     if i % 3 == 0
                     else "Second Class"

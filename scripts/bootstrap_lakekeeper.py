@@ -99,7 +99,10 @@ def _ensure_project() -> str:
             return str(project_id)
         for project in _as_list(response.get("projects")):
             if isinstance(project, dict) and project.get("name") == PROJECT_NAME:
-                return str(project["project-id"])
+                project_id = project.get("project-id")
+                if not project_id:
+                    raise LakekeeperError("Project entry missing project-id")
+                return str(project_id)
 
     response = _request(
         "POST",
@@ -117,7 +120,10 @@ def _ensure_warehouse(project_id: str) -> str:
     if isinstance(response, dict):
         for warehouse in _as_list(response.get("warehouses")):
             if isinstance(warehouse, dict) and warehouse.get("name") == WAREHOUSE_NAME:
-                return str(warehouse["warehouse-id"])
+                warehouse_id = warehouse.get("warehouse-id")
+                if not warehouse_id:
+                    raise LakekeeperError("Warehouse entry missing warehouse-id")
+                return str(warehouse_id)
 
     response = _request(
         "POST",
