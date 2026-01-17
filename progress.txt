@@ -10,3 +10,30 @@ Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
   - To run ruff with all dev dependencies, use `uv run --all-extras ruff check src/ tests/`
   - PyIceberg successfully installed with pyarrow extras for Arrow integration
 ---
+
+## [2026-01-17] - US-002
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Verified CatalogConfig already has all required fields: type, uri, warehouse, credential, s3
+- All environment variables properly configured: ICEBERG_EXPLORER_CATALOG__TYPE, URI, WAREHOUSE
+- S3Config nested for credential passthrough
+- Files changed: None (configuration already existed)
+- **Learnings for future iterations:**
+  - Always verify existing codebase before implementing - configuration may already exist
+  - CatalogConfig uses env_prefix="ICEBERG_EXPLORER_CATALOG__" pattern for nested env vars
+---
+
+## [2026-01-17] - US-003
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Created src/iceberg_explorer/catalog/__init__.py
+- Created src/iceberg_explorer/catalog/service.py with CatalogService class
+- Implemented lazy initialization via @property decorator
+- Added _build_catalog_properties() to construct catalog configuration from settings
+- Implemented close() method for proper lifecycle management
+- Supports REST catalog with PyIceberg load_catalog()
+- Files changed: src/iceberg_explorer/catalog/__init__.py, src/iceberg_explorer/catalog/service.py
+- **Learnings for future iterations:**
+  - PyIceberg's load_catalog() accepts properties as kwargs (e.g., uri, warehouse, credential)
+  - S3 configuration is passed via s3.* properties (s3.endpoint, s3.access-key-id, etc.)
+  - Lazy initialization pattern: use @property to initialize on first access
+  - Use TYPE_CHECKING to avoid circular imports while maintaining type hints
+---
