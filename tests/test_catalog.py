@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
+from iceberg_explorer.catalog.service import reset_catalog_service
 from iceberg_explorer.config import reset_settings
 from iceberg_explorer.main import app
 from iceberg_explorer.query.engine import reset_engine
@@ -19,10 +20,12 @@ def clean_state():
     reset_settings()
     reset_engine()
     reset_executor()
+    reset_catalog_service()
     yield
     reset_settings()
     reset_engine()
     reset_executor()
+    reset_catalog_service()
 
 
 @pytest.fixture
@@ -38,6 +41,13 @@ def mock_engine():
     engine.is_initialized = True
     engine.catalog_name = "test_catalog"
     return engine
+
+
+@pytest.fixture
+def mock_catalog_service():
+    """Create a mock catalog service."""
+    service = MagicMock()
+    return service
 
 
 class TestListNamespacesModels:
@@ -74,19 +84,17 @@ class TestListNamespacesModels:
 class TestListNamespacesEndpoint:
     """Tests for GET /api/v1/catalog/namespaces endpoint."""
 
-    def test_list_top_level_namespaces(self, client: TestClient, mock_engine: MagicMock):
+    def test_list_top_level_namespaces(self, client: TestClient, mock_catalog_service: MagicMock):
         """Test listing top-level namespaces."""
-        mock_conn = MagicMock()
-        mock_conn.execute.return_value.fetchall.return_value = [
-            ("accounting",),
-            ("engineering",),
-            ("information_schema",),
-            ("main",),
+        mock_catalog_service.list_namespaces.return_value = [
+            "accounting",
+            "engineering",
         ]
-        mock_engine.get_connection.return_value.__enter__.return_value = mock_conn
-        mock_engine.get_connection.return_value.__exit__.return_value = None
 
-        with patch("iceberg_explorer.api.routes.catalog.get_engine", return_value=mock_engine):
+        with patch(
+            "iceberg_explorer.api.routes.catalog.get_catalog_service",
+            return_value=mock_catalog_service,
+        ):
             response = client.get("/api/v1/catalog/namespaces")
 
         assert response.status_code == 200
@@ -94,100 +102,86 @@ class TestListNamespacesEndpoint:
         assert "namespaces" in data
         assert ["accounting"] in data["namespaces"]
         assert ["engineering"] in data["namespaces"]
-        assert ["information_schema"] not in data["namespaces"]
-        assert ["main"] not in data["namespaces"]
+        mock_catalog_service.list_namespaces.assert_called_once_with(parent=None)
 
-    def test_list_empty_namespaces(self, client: TestClient, mock_engine: MagicMock):
+    def test_list_empty_namespaces(self, client: TestClient, mock_catalog_service: MagicMock):
         """Test listing namespaces when catalog is empty."""
-        mock_conn = MagicMock()
-        mock_conn.execute.return_value.fetchall.return_value = []
-        mock_engine.get_connection.return_value.__enter__.return_value = mock_conn
-        mock_engine.get_connection.return_value.__exit__.return_value = None
+        mock_catalog_service.list_namespaces.return_value = []
 
-        with patch("iceberg_explorer.api.routes.catalog.get_engine", return_value=mock_engine):
+        with patch(
+            "iceberg_explorer.api.routes.catalog.get_catalog_service",
+            return_value=mock_catalog_service,
+        ):
             response = client.get("/api/v1/catalog/namespaces")
 
         assert response.status_code == 200
         data = response.json()
         assert data["namespaces"] == []
 
-    def test_list_child_namespaces(self, client: TestClient, mock_engine: MagicMock):
+    def test_list_child_namespaces(self, client: TestClient, mock_catalog_service: MagicMock):
         """Test listing child namespaces under a parent."""
-        mock_conn = MagicMock()
-        call_count = [0]
+        mock_catalog_service.list_namespaces.return_value = [
+            "accounting.tax",
+            "accounting.payroll",
+        ]
 
-        def mock_execute(sql):
-            call_count[0] += 1
-            result = MagicMock()
-            if "LIMIT 1" in sql:
-                result.fetchall.return_value = [(1,)]
-            else:
-                result.fetchall.return_value = [
-                    ("tax",),
-                    ("payroll",),
-                ]
-            return result
-
-        mock_conn.execute.side_effect = mock_execute
-        mock_engine.get_connection.return_value.__enter__.return_value = mock_conn
-        mock_engine.get_connection.return_value.__exit__.return_value = None
-
-        with patch("iceberg_explorer.api.routes.catalog.get_engine", return_value=mock_engine):
+        with patch(
+            "iceberg_explorer.api.routes.catalog.get_catalog_service",
+            return_value=mock_catalog_service,
+        ):
             response = client.get("/api/v1/catalog/namespaces?parent=accounting")
 
         assert response.status_code == 200
         data = response.json()
         assert ["accounting", "tax"] in data["namespaces"]
         assert ["accounting", "payroll"] in data["namespaces"]
+        mock_catalog_service.list_namespaces.assert_called_once_with(parent="accounting")
 
     def test_list_nested_namespaces_with_separator(
-        self, client: TestClient, mock_engine: MagicMock
+        self, client: TestClient, mock_catalog_service: MagicMock
     ):
         """Test listing namespaces with unit separator for multi-level parent."""
-        mock_conn = MagicMock()
+        mock_catalog_service.list_namespaces.return_value = [
+            "accounting.tax.2023",
+            "accounting.tax.2024",
+        ]
 
-        def mock_execute(sql):
-            result = MagicMock()
-            if "LIMIT 1" in sql:
-                result.fetchall.return_value = [(1,)]
-            else:
-                result.fetchall.return_value = [("2023",), ("2024",)]
-            return result
-
-        mock_conn.execute.side_effect = mock_execute
-        mock_engine.get_connection.return_value.__enter__.return_value = mock_conn
-        mock_engine.get_connection.return_value.__exit__.return_value = None
-
-        with patch("iceberg_explorer.api.routes.catalog.get_engine", return_value=mock_engine):
+        with patch(
+            "iceberg_explorer.api.routes.catalog.get_catalog_service",
+            return_value=mock_catalog_service,
+        ):
             response = client.get("/api/v1/catalog/namespaces?parent=accounting%1Ftax")
 
         assert response.status_code == 200
         data = response.json()
         assert ["accounting", "tax", "2023"] in data["namespaces"]
         assert ["accounting", "tax", "2024"] in data["namespaces"]
+        mock_catalog_service.list_namespaces.assert_called_once_with(parent="accounting.tax")
 
-    def test_parent_namespace_not_found(self, client: TestClient, mock_engine: MagicMock):
+    def test_parent_namespace_not_found(self, client: TestClient, mock_catalog_service: MagicMock):
         """Test 404 when parent namespace doesn't exist."""
-        mock_conn = MagicMock()
-        mock_conn.execute.side_effect = Exception("Catalog Error: Schema with name does not exist")
-        mock_engine.get_connection.return_value.__enter__.return_value = mock_conn
-        mock_engine.get_connection.return_value.__exit__.return_value = None
+        from pyiceberg.exceptions import NoSuchNamespaceError
 
-        with patch("iceberg_explorer.api.routes.catalog.get_engine", return_value=mock_engine):
+        mock_catalog_service.list_namespaces.side_effect = NoSuchNamespaceError()
+
+        with patch(
+            "iceberg_explorer.api.routes.catalog.get_catalog_service",
+            return_value=mock_catalog_service,
+        ):
             response = client.get("/api/v1/catalog/namespaces?parent=nonexistent")
 
         assert response.status_code == 404
         data = response.json()
         assert "not found" in data["detail"].lower() or "Namespace" in data["detail"]
 
-    def test_page_size_parameter(self, client: TestClient, mock_engine: MagicMock):
+    def test_page_size_parameter(self, client: TestClient, mock_catalog_service: MagicMock):
         """Test page-size query parameter validation."""
-        mock_conn = MagicMock()
-        mock_conn.execute.return_value.fetchall.return_value = []
-        mock_engine.get_connection.return_value.__enter__.return_value = mock_conn
-        mock_engine.get_connection.return_value.__exit__.return_value = None
+        mock_catalog_service.list_namespaces.return_value = []
 
-        with patch("iceberg_explorer.api.routes.catalog.get_engine", return_value=mock_engine):
+        with patch(
+            "iceberg_explorer.api.routes.catalog.get_catalog_service",
+            return_value=mock_catalog_service,
+        ):
             response = client.get("/api/v1/catalog/namespaces?page-size=50")
 
         assert response.status_code == 200
@@ -201,20 +195,6 @@ class TestListNamespacesEndpoint:
         """Test page-size maximum validation."""
         response = client.get("/api/v1/catalog/namespaces?page-size=10000")
         assert response.status_code == 422
-
-    def test_engine_initialization(self, client: TestClient, mock_engine: MagicMock):
-        """Test engine is initialized if not already."""
-        mock_engine.is_initialized = False
-        mock_conn = MagicMock()
-        mock_conn.execute.return_value.fetchall.return_value = []
-        mock_engine.get_connection.return_value.__enter__.return_value = mock_conn
-        mock_engine.get_connection.return_value.__exit__.return_value = None
-
-        with patch("iceberg_explorer.api.routes.catalog.get_engine", return_value=mock_engine):
-            response = client.get("/api/v1/catalog/namespaces")
-
-        assert response.status_code == 200
-        mock_engine.initialize.assert_called_once()
 
 
 class TestHelperFunctions:

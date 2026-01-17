@@ -18,6 +18,7 @@ from iceberg_explorer.api.routes.utils import (
     _parse_namespace,
     _quote_identifier,
 )
+from iceberg_explorer.catalog.service import get_catalog_service
 from iceberg_explorer.models.catalog import (
     ColumnStatistics,
     ListNamespacesResponse,
@@ -79,50 +80,27 @@ async def list_namespaces(
     Raises:
         HTTPException: 404 if parent namespace doesn't exist.
     """
-    engine = get_engine()
+    from pyiceberg.exceptions import NoSuchNamespaceError
 
-    if not engine.is_initialized:
-        engine.initialize()
+    catalog_service = get_catalog_service()
 
     parent_parts = _parse_namespace(parent)
-    catalog_name = engine.catalog_name
 
-    with engine.get_connection() as conn:
-        if parent_parts:
-            parent_path = _build_namespace_path(catalog_name, parent_parts)
-            try:
-                conn.execute(f"SELECT * FROM {parent_path}.information_schema.schemata LIMIT 1")
-            except Exception as e:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Namespace not found: {'.'.join(parent_parts)}",
-                ) from e
+    parent_ns_str = ".".join(parent_parts) if parent_parts else None
 
-        schema_path = (
-            _build_namespace_path(catalog_name, parent_parts)
-            if parent_parts
-            else _quote_identifier(catalog_name)
-        )
-        sql = f"SELECT schema_name FROM {schema_path}.information_schema.schemata"
+    try:
+        namespaces = catalog_service.list_namespaces(parent=parent_ns_str)
+    except NoSuchNamespaceError as e:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Namespace not found: {'.'.join(parent_parts) if parent_parts else 'root'}",
+        ) from e
 
-        try:
-            result = conn.execute(sql).fetchall()
-        except Exception as e:
-            if "does not exist" in str(e).lower() or "not found" in str(e).lower():
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Namespace not found: {'.'.join(parent_parts) if parent_parts else 'root'}",
-                ) from e
-            raise
+    namespace_lists: list[list[str]] = []
+    for ns in namespaces:
+        namespace_lists.append(ns.split("."))
 
-        namespaces: list[list[str]] = []
-        for row in result:
-            schema_name = row[0]
-            if schema_name not in ("main", "information_schema", "pg_catalog"):
-                full_namespace = parent_parts + [schema_name] if parent_parts else [schema_name]
-                namespaces.append(full_namespace)
-
-    return ListNamespacesResponse(namespaces=namespaces)
+    return ListNamespacesResponse(namespaces=namespace_lists)
 
 
 @router.get("/namespaces/{namespace}/tables", response_model=ListTablesResponse)

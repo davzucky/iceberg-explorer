@@ -97,8 +97,12 @@ class CatalogService:
         else:
             raise RuntimeError(f"Unsupported catalog type: {catalog_type}")
 
-    def list_namespaces(self) -> list[str]:
-        """List all namespaces in the catalog.
+    def list_namespaces(self, parent: str | None = None) -> list[str]:
+        """List namespaces in the catalog.
+
+        Args:
+            parent: Optional parent namespace identifier (e.g., "db" or "db.schema").
+                    If not provided, lists top-level namespaces.
 
         Returns:
             List of namespace identifiers as strings. Multi-level namespaces
@@ -107,8 +111,13 @@ class CatalogService:
 
         Raises:
             RuntimeError: If the catalog type is not supported.
+            NoSuchNamespaceError: If a namespace with the given name does not exist.
         """
-        namespaces = self.catalog.list_namespaces()
+        if parent:
+            parent_tuple = tuple(parent.split("."))
+            namespaces = self.catalog.list_namespaces(namespace=parent_tuple)
+        else:
+            namespaces = self.catalog.list_namespaces()
         return [".".join(ns) for ns in namespaces]
 
     def list_tables(self, namespace: str) -> list[str]:
@@ -206,3 +215,26 @@ class CatalogService:
         """
         if self._catalog is not None:
             self._catalog = None
+
+
+_catalog_service: CatalogService | None = None
+
+
+def get_catalog_service() -> CatalogService:
+    """Get the global catalog service instance (cached).
+
+    Returns:
+        The global catalog service.
+    """
+    global _catalog_service
+    if _catalog_service is None:
+        _catalog_service = CatalogService()
+    return _catalog_service
+
+
+def reset_catalog_service() -> None:
+    """Reset global catalog service (useful for testing)."""
+    global _catalog_service
+    if _catalog_service is not None:
+        _catalog_service.close()
+    _catalog_service = None

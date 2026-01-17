@@ -126,8 +126,8 @@
         "Typecheck passes"
       ],
       "priority": 8,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Updated endpoint to use CatalogService; response format is backward compatible (list of list of strings)"
     },
     {
       "id": "US-009",
