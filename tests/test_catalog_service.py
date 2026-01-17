@@ -167,3 +167,88 @@ class TestCatalogServiceListTables:
             with pytest.raises(NoSuchNamespaceError):
                 service.list_tables("nonexistent")
             mock_catalog.list_tables.assert_called_once_with(("nonexistent",))
+
+
+class TestCatalogServiceGetTableDetails:
+    """Tests for get_table_details method."""
+
+    def test_get_table_details_returns_basic_info(self, mock_settings: Settings):
+        """Test getting table details returns basic metadata."""
+        service = CatalogService(settings=mock_settings)
+        mock_catalog = MagicMock()
+        mock_table = MagicMock()
+        mock_table.metadata.location = "s3://bucket/table"
+        mock_table.metadata.current_snapshot_id = 12345
+        mock_table.metadata.partition_specs = []
+        mock_table.metadata.snapshots = []
+        mock_table.metadata.spec.return_value = None
+        mock_catalog.load_table.return_value = mock_table
+
+        with patch.object(service, "_catalog", mock_catalog):
+            result = service.get_table_details("db", "users")
+            assert result["location"] == "s3://bucket/table"
+            assert result["snapshot_id"] == 12345
+            assert result["partition_spec"] is None
+            assert result["num_snapshots"] == 0
+            mock_catalog.load_table.assert_called_once_with(("db", "users"))
+
+    def test_get_table_details_with_partition_spec(self, mock_settings: Settings):
+        """Test getting table details includes partition spec."""
+        service = CatalogService(settings=mock_settings)
+        mock_catalog = MagicMock()
+        mock_table = MagicMock()
+        mock_table.metadata.location = "s3://bucket/table"
+        mock_table.metadata.current_snapshot_id = 12345
+        mock_table.metadata.snapshots = []
+        mock_partition_field = MagicMock()
+        mock_partition_field.source_id = 1
+        mock_partition_field.name = "date"
+        mock_partition_field.transform = "bucket"
+        mock_partition_spec = MagicMock()
+        mock_partition_spec.fields = [mock_partition_field]
+        mock_table.metadata.partition_specs = [mock_partition_spec]
+        mock_table.metadata.spec.return_value = mock_partition_spec
+
+        mock_catalog.load_table.return_value = mock_table
+
+        with patch.object(service, "_catalog", mock_catalog):
+            result = service.get_table_details("db", "users")
+            assert result["location"] == "s3://bucket/table"
+            assert result["snapshot_id"] == 12345
+            assert result["partition_spec"] == [
+                {"source_id": 1, "name": "date", "transform": "bucket"}
+            ]
+            assert result["num_snapshots"] == 0
+            mock_catalog.load_table.assert_called_once_with(("db", "users"))
+
+    def test_get_table_details_handles_multi_level_namespace(self, mock_settings: Settings):
+        """Test getting table details in multi-level namespace."""
+        service = CatalogService(settings=mock_settings)
+        mock_catalog = MagicMock()
+        mock_table = MagicMock()
+        mock_table.metadata.location = "s3://bucket/table"
+        mock_table.metadata.current_snapshot_id = 67890
+        mock_table.metadata.partition_specs = []
+        mock_table.metadata.snapshots = [MagicMock(), MagicMock()]
+        mock_table.metadata.spec.return_value = None
+        mock_catalog.load_table.return_value = mock_table
+
+        with patch.object(service, "_catalog", mock_catalog):
+            result = service.get_table_details("db.schema", "users")
+            assert result["location"] == "s3://bucket/table"
+            assert result["snapshot_id"] == 67890
+            assert result["num_snapshots"] == 2
+            mock_catalog.load_table.assert_called_once_with(("db", "schema", "users"))
+
+    def test_get_table_details_raises_on_nonexistent_table(self, mock_settings: Settings):
+        """Test getting details from non-existent table raises error."""
+        from pyiceberg.exceptions import NoSuchTableError
+
+        service = CatalogService(settings=mock_settings)
+        mock_catalog = MagicMock()
+        mock_catalog.load_table.side_effect = NoSuchTableError()
+
+        with patch.object(service, "_catalog", mock_catalog):
+            with pytest.raises(NoSuchTableError):
+                service.get_table_details("db", "nonexistent")
+            mock_catalog.load_table.assert_called_once_with(("db", "nonexistent"))

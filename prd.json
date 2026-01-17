@@ -95,8 +95,8 @@
         "Typecheck passes"
       ],
       "priority": 6,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented get_table_details() with unit tests"
     },
     {
       "id": "US-007",

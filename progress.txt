@@ -67,3 +67,19 @@ Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
   - NoSuchNamespaceError is raised by PyIceberg when namespace doesn't exist
   - Can test error propagation using pytest.raises() with specific exception type
 ---
+
+## [2026-01-17] - US-006
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Added get_table_details(namespace, table_name) method to CatalogService
+- Calls PyIceberg catalog.load_table() to get table metadata
+- Returns dict with location, snapshot_id, partition_spec, num_snapshots
+- Converts partition spec fields to dict format for API response
+- NoSuchTableError propagates correctly for non-existent tables
+- Added 4 unit tests for get_table_details
+- Files changed: src/iceberg_explorer/catalog/service.py, tests/test_catalog_service.py
+- **Learnings for future iterations:**
+  - PyIceberg Table object has metadata attribute with location, current_snapshot_id, partition_specs, snapshots
+  - Use table.metadata.spec() to get current partition spec
+  - PartitionSpec fields have source_id, name, and transform attributes
+  - Can test complex nested structures with MagicMock for metadata
+---

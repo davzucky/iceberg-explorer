@@ -128,6 +128,43 @@ class CatalogService:
         tables = self.catalog.list_tables(namespace_tuple)
         return [".".join(table) for table in tables]
 
+    def get_table_details(self, namespace: str, table_name: str) -> dict:
+        """Get details for a table.
+
+        Args:
+            namespace: Namespace identifier (e.g., "db" or "db.schema").
+            table_name: Name of the table.
+
+        Returns:
+            Dictionary containing table metadata including:
+            - location: Table location (URI)
+            - snapshot_id: Current snapshot ID
+            - partition_spec: Partition specification
+            - num_snapshots: Total number of snapshots
+
+        Raises:
+            RuntimeError: If catalog type is not supported.
+            NoSuchTableError: If the table does not exist.
+        """
+        table_identifier = tuple(namespace.split(".") + [table_name])
+        table = self.catalog.load_table(table_identifier)
+
+        partition_spec_info = None
+        if table.metadata.partition_specs:
+            spec = table.metadata.spec()
+            if spec:
+                partition_spec_info = [
+                    {"source_id": field.source_id, "name": field.name, "transform": field.transform}
+                    for field in spec.fields
+                ]
+
+        return {
+            "location": table.metadata.location,
+            "snapshot_id": table.metadata.current_snapshot_id,
+            "partition_spec": partition_spec_info,
+            "num_snapshots": len(table.metadata.snapshots),
+        }
+
     def close(self) -> None:
         """Close the catalog connection.
 
