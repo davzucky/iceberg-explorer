@@ -1,4 +1,12 @@
 ## Codebase Patterns
+- To run ruff with all dev dependencies, use `uv run --all-extras ruff check src/ tests/`
+- PyIceberg's list_namespaces() accepts optional namespace parameter (tuple or string) to list child namespaces
+- API uses unit separator (\x1f) for multi-level namespaces in URLs, but PyIceberg uses dot-separated strings
+- Conversion needed: ".".join(parent_parts) for parent, ns.split(".") for returned namespaces
+- Follow existing patterns: use global singleton pattern for services (get_catalog_service() like get_engine())
+- When updating tests, keep existing fixtures if used by other test classes
+- Use NoSuchNamespaceError from pyiceberg.exceptions for proper error handling
+- Unit separator decoding: use _parse_namespace() helper which splits on \x1f
 
 ## [2026-01-17] - US-001
 Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
@@ -98,4 +106,40 @@ Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
   - Schema object has fields, schema_id, and identifier attributes
   - Use str(field.field_type) to convert field type to string
   - field.optional attribute indicates nullability (True = nullable)
+---
+
+## [2026-01-17] - US-008
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Added get_catalog_service() and reset_catalog_service() functions to catalog/service.py (follows same pattern as get_engine())
+- Updated CatalogService.list_namespaces() to accept optional parent parameter for listing child namespaces
+- Updated GET /api/v1/catalog/namespaces endpoint to use CatalogService instead of DuckDB
+- Removed DuckDB-based namespace listing code from the endpoint
+- Response format remains backward compatible (returns list of list of strings)
+- Updated test_catalog.py: added mock_catalog_service fixture, updated TestListNamespacesEndpoint tests to mock CatalogService
+- All tests pass (8 namespace tests), linting passes
+- Files changed: src/iceberg_explorer/api/routes/catalog.py, src/iceberg_explorer/catalog/service.py, tests/test_catalog.py
+- **Learnings for future iterations:**
+  - PyIceberg's list_namespaces() accepts optional namespace parameter (tuple or string) to list child namespaces
+  - API uses unit separator (\x1f) for multi-level namespaces in URLs, but PyIceberg uses dot-separated strings
+  - Conversion needed: ".".join(parent_parts) for parent, ns.split(".") for returned namespaces
+  - Follow existing patterns: use global singleton pattern for services (get_catalog_service() like get_engine())
+  - When updating tests, keep existing fixtures if used by other test classes
+  - Use NoSuchNamespaceError from pyiceberg.exceptions for proper error handling
+   - Unit separator decoding: use _parse_namespace() helper which splits on \x1f
+
+## [2026-01-17] - US-009
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Updated GET /api/v1/catalog/namespaces/{namespace}/tables endpoint to use CatalogService
+- Removed DuckDB-based table listing code (engine initialization, information_schema queries)
+- Response format remains backward compatible (returns TableIdentifier objects)
+- Handles multi-level namespaces with unit separator decoding via _parse_namespace()
+- Updated TestListTablesEndpoint tests to use mock_catalog_service instead of mock_engine
+- All tests pass (6 table listing tests), linting passes
+- Files changed: src/iceberg_explorer/api/routes/catalog.py, tests/test_catalog.py
+- **Learnings for future iterations:**
+  - PyIceberg catalog.list_tables() returns fully qualified table identifiers (e.g., "db.schema.table")
+  - Need to parse table name from last segment of identifier: table_parts[-1]
+  - When refactoring from DuckDB to PyIceberg, remove engine.get_connection() and all SQL queries
+  - Import NoSuchNamespaceError from pyiceberg.exceptions at function level (or top-level) for error handling
+  - TableIdentifier model expects namespace parts as list and table name as string - maintain this format
 ---
