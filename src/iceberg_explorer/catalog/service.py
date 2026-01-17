@@ -106,10 +106,27 @@ class CatalogService:
             Returns an empty list if the catalog has no namespaces.
 
         Raises:
-            RuntimeError: If catalog type is not supported.
+            RuntimeError: If the catalog type is not supported.
         """
         namespaces = self.catalog.list_namespaces()
         return [".".join(ns) for ns in namespaces]
+
+    def list_tables(self, namespace: str) -> list[str]:
+        """List tables in a namespace.
+
+        Args:
+            namespace: Namespace identifier (e.g., "db" or "db.schema").
+
+        Returns:
+            List of table identifiers as strings.
+
+        Raises:
+            RuntimeError: If catalog type is not supported.
+            NoSuchNamespaceError: If a namespace with the given name does not exist.
+        """
+        namespace_tuple = tuple(namespace.split("."))
+        tables = self.catalog.list_tables(namespace_tuple)
+        return [".".join(table) for table in tables]
 
     def close(self) -> None:
         """Close the catalog connection.

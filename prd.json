@@ -79,8 +79,8 @@
         "Typecheck passes"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented list_tables() with unit tests"
     },
     {
       "id": "US-006",

@@ -102,3 +102,68 @@ class TestCatalogServiceListNamespaces:
             result = service.list_namespaces()
             assert result == ["db"]
             service._initialize_catalog.assert_called_once()
+
+
+class TestCatalogServiceListTables:
+    """Tests for list_tables method."""
+
+    def test_list_tables_returns_empty_list(self, mock_settings: Settings):
+        """Test listing tables from empty namespace returns empty list."""
+        service = CatalogService(settings=mock_settings)
+        mock_catalog = MagicMock()
+        mock_catalog.list_tables.return_value = []
+
+        with patch.object(service, "_catalog", mock_catalog):
+            result = service.list_tables("db")
+            assert result == []
+            mock_catalog.list_tables.assert_called_once_with(("db",))
+
+    def test_list_tables_returns_single_table(self, mock_settings: Settings):
+        """Test listing tables returns single table."""
+        service = CatalogService(settings=mock_settings)
+        mock_catalog = MagicMock()
+        mock_catalog.list_tables.return_value = [("db", "users")]
+
+        with patch.object(service, "_catalog", mock_catalog):
+            result = service.list_tables("db")
+            assert result == ["db.users"]
+            mock_catalog.list_tables.assert_called_once_with(("db",))
+
+    def test_list_tables_returns_multiple_tables(self, mock_settings: Settings):
+        """Test listing tables returns multiple tables."""
+        service = CatalogService(settings=mock_settings)
+        mock_catalog = MagicMock()
+        mock_catalog.list_tables.return_value = [
+            ("db", "users"),
+            ("db", "orders"),
+            ("db", "products"),
+        ]
+
+        with patch.object(service, "_catalog", mock_catalog):
+            result = service.list_tables("db")
+            assert result == ["db.users", "db.orders", "db.products"]
+            mock_catalog.list_tables.assert_called_once_with(("db",))
+
+    def test_list_tables_handles_multi_level_namespace(self, mock_settings: Settings):
+        """Test listing tables in multi-level namespace."""
+        service = CatalogService(settings=mock_settings)
+        mock_catalog = MagicMock()
+        mock_catalog.list_tables.return_value = [("db", "schema", "table1")]
+
+        with patch.object(service, "_catalog", mock_catalog):
+            result = service.list_tables("db.schema")
+            assert result == ["db.schema.table1"]
+            mock_catalog.list_tables.assert_called_once_with(("db", "schema"))
+
+    def test_list_tables_raises_on_nonexistent_namespace(self, mock_settings: Settings):
+        """Test listing tables from non-existent namespace raises error."""
+        from pyiceberg.exceptions import NoSuchNamespaceError
+
+        service = CatalogService(settings=mock_settings)
+        mock_catalog = MagicMock()
+        mock_catalog.list_tables.side_effect = NoSuchNamespaceError()
+
+        with patch.object(service, "_catalog", mock_catalog):
+            with pytest.raises(NoSuchNamespaceError):
+                service.list_tables("nonexistent")
+            mock_catalog.list_tables.assert_called_once_with(("nonexistent",))
