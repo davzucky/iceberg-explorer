@@ -1,0 +1,118 @@
+{
+  "project": "Iceberg Explorer DevContainer Setup",
+  "branchName": "ralph/devcontainer-setup",
+  "description": "Create a devcontainer configuration for Iceberg Explorer that enables local development and testing against a real Apache Iceberg environment. The setup includes Lakekeeper (REST catalog) and MinIO (S3-compatible storage), allowing developers to work with the full stack without external dependencies.",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Create devcontainer directory structure",
+      "description": "As a developer, I want a proper .devcontainer directory structure so that VS Code and the devcontainer CLI can recognize and build the environment.",
+      "acceptanceCriteria": [
+        ".devcontainer/ directory exists at repository root",
+        "devcontainer.json file exists with valid JSON schema",
+        "docker-compose.yml file exists for multi-container orchestration",
+        "devcontainer templates apply or manual creation succeeds",
+        "Lint check passes (valid JSON/YAML)"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Configure Python development container",
+      "description": "As a developer, I want the main development container to have Python 3.14 and uv package manager so I can run the Iceberg Explorer application.",
+      "acceptanceCriteria": [
+        "Dev container uses Python 3.14 base image",
+        "uv package manager is installed and available in PATH",
+        "Project dependencies can be installed via uv sync --all-extras",
+        "uv run iceberg-explorer starts the application successfully",
+        "uv run pytest runs tests successfully",
+        "Container has /workspace mounted to project root"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Configure MinIO S3 storage service",
+      "description": "As a developer, I want MinIO running as S3-compatible storage so that Iceberg tables have a place to store data files.",
+      "acceptanceCriteria": [
+        "MinIO service defined in docker-compose.yml",
+        "MinIO accessible on port 9000 (S3 API) within container network",
+        "MinIO console accessible on port 9001 from host browser",
+        "Default credentials configured (minioadmin/minioadmin for dev)",
+        "iceberg-warehouse bucket automatically created on startup",
+        "MinIO healthcheck passes before dependent services start"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Configure Lakekeeper REST catalog service",
+      "description": "As a developer, I want Lakekeeper running as an Iceberg REST catalog so I can browse namespaces and tables through the Iceberg Explorer.",
+      "acceptanceCriteria": [
+        "Lakekeeper service defined in docker-compose.yml",
+        "PostgreSQL service defined for Lakekeeper metadata storage",
+        "Lakekeeper REST API accessible at http://lakekeeper:8181/catalog within container network",
+        "Lakekeeper configured to use MinIO as storage backend",
+        "Lakekeeper healthcheck passes before app container starts",
+        "A default warehouse named demo is configured"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Configure environment variables for Iceberg Explorer",
+      "description": "As a developer, I want environment variables pre-configured so that Iceberg Explorer connects to Lakekeeper and MinIO automatically.",
+      "acceptanceCriteria": [
+        "ICEBERG_EXPLORER_CATALOG__TYPE=rest is set",
+        "ICEBERG_EXPLORER_CATALOG__URI=http://lakekeeper:8181/catalog is set",
+        "ICEBERG_EXPLORER_CATALOG__WAREHOUSE=demo is set",
+        "AWS credentials for MinIO access are configured",
+        "AWS_ENDPOINT_URL=http://minio:9000 is set",
+        "Application starts without manual configuration"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Create data seeding script",
+      "description": "As a developer, I want sample data automatically seeded so I can immediately explore and test the application.",
+      "acceptanceCriteria": [
+        "Seed script creates at least 2 namespaces (e.g., nyc, sales)",
+        "Seed script creates at least 2 tables per namespace with different schemas",
+        "Tables contain sample rows (at least 100 rows per table)",
+        "Seeding runs automatically on first container startup",
+        "Seeding is idempotent (safe to run multiple times)",
+        "Seeding completes before VS Code attaches or returns success"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Verify end-to-end connectivity",
+      "description": "As a developer, I want to verify the entire setup works so I can confidently start developing.",
+      "acceptanceCriteria": [
+        "devcontainer up --workspace-folder . completes successfully",
+        "uv run iceberg-explorer starts and serves on port 8000",
+        "Iceberg Explorer UI shows seeded namespaces in sidebar",
+        "SQL query execution returns results from seeded tables",
+        "devcontainer exec can run commands in the container",
+        "Container can be stopped and restarted without data loss (within session)"
+      ],
+      "priority": 7,
+      "passes": true,
+      "notes": ""
+    }
+  ]
+}

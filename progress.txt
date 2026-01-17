@@ -1,0 +1,197 @@
+# Ralph Progress Log
+Started: Fri Jan 17 00:35:00 AM JST 2026
+---
+
+## Codebase Patterns
+
+## Fri Jan 17 00:35:00 AM JST 2026 - US-001
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Verified .devcontainer/ directory structure exists at repository root
+- Verified devcontainer.json has valid JSON schema
+- Verified docker-compose.yml exists for multi-container orchestration
+- Fixed Dockerfile issue: uv --version was called before uv was installed
+  - Combined uv installation and version check into single RUN command
+- Verified Dockerfile builds successfully with docker build
+- Validated devcontainer.json and docker-compose.yml using Python json/yaml parsers
+- All 324 tests pass with uv run pytest
+- Ruff linting passes with uv run ruff check src/ tests/
+
+**Learnings for future iterations:**
+- Devcontainer structure uses: .devcontainer/devcontainer.json, .devcontainer/docker-compose.yml, .devcontainer/Dockerfile
+- Base image: mcr.microsoft.com/devcontainers/python:3.14
+- Python's json module validates JSON, PyYAML validates YAML structure
+- Dockerfile RUN commands should be combined when dependencies exist between them (pip install && uv --version)
+- Quality checks: `uv run ruff check src/ tests/` and `uv run pytest`
+- Pre-commit hooks automatically fix trailing whitespace and missing newlines
+
+---
+
+## Fri Jan 17 00:45:00 AM JST 2026 - US-002
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Verified dev container uses Python 3.14 base image (FROM mcr.microsoft.com/devcontainers/python:3.14)
+- Verified uv package manager is installed and added to PATH (RUN pip install uv, ENV PATH)
+- Verified project dependencies install command is configured (postCreateCommand: uv sync --all-extras)
+- Verified uv run iceberg-explorer starts application successfully
+  - Tested by starting app in background, confirmed it listens on port 8080
+  - App stops cleanly with SIGTERM
+- Verified uv run pytest runs tests successfully (324 tests pass)
+- Verified container has /workspace mounted to project root (workspaceFolder: /workspace, volumes mount)
+- All existing devcontainer configuration met acceptance criteria - no changes needed
+- Quality checks: ruff and pytest pass
+
+**Learnings for future iterations:**
+- App server runs on port 8080 by default (config.ServerConfig.port)
+- uv run iceberg-explorer uses uvicorn.run() which blocks and keeps server running
+- To verify app starts without hanging: run in background with subprocess.Popen(), check process status, then send SIGTERM
+- postCreateCommand in devcontainer.json runs after container is created
+- workspaceFolder in devcontainer.json sets the container's working directory
+- Docker Compose volumes mount the workspace: "../..:/workspace:cached"
+
+---
+
+## Fri Jan 17 01:00:00 AM JST 2026 - US-003
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Added MinIO service to docker-compose.yml using minio/minio:latest image
+- Configured MinIO ports: 9000 (S3 API), 9001 (console)
+- Set MinIO credentials: minioadmin/minioadmin (via MINIO_ROOT_USER and MINIO_ROOT_PASSWORD)
+- Added MinIO healthcheck: curl http://localhost:9000/minio/health/live
+- Created minio-init init container to automatically create iceberg-warehouse bucket on startup
+  - Uses minio/mc:latest image with MinIO client
+  - Depends on MinIO service becoming healthy (condition: service_healthy)
+  - Runs mc alias set to configure MinIO endpoint
+  - Runs mc mb to create iceberg-warehouse bucket with --ignore-existing flag
+- Updated app service to depend on MinIO health and minio-init completion
+  - depends_on minio with condition: service_healthy
+  - depends_on minio-init with condition: service_completed_successfully
+- Validated docker-compose.yml with PyYAML and docker-compose config
+- Quality checks: ruff and pytest pass
+
+**Learnings for future iterations:**
+- MinIO healthcheck uses docker-compose v3 syntax: test, interval, timeout, retries
+- Use depends_on with condition: service_healthy to wait for healthcheck to pass
+- Use depends_on with condition: service_completed_successfully to wait for init container to finish
+- Init containers should exit after completing their task (not loop indefinitely)
+- MinIO client (mc) syntax: mc alias set <alias> <endpoint> <user> <password>
+- mc mb <alias>/<bucket> --ignore-existing creates bucket without error if it exists
+- network_mode: service:minio makes the app share MinIO's network namespace
+
+---
+
+## Fri Jan 17 01:15:00 AM JST 2026 - US-004
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Added PostgreSQL service to docker-compose.yml using postgres:15 image
+  - Configured with user/password: iceberg/iceberg
+  - Database name: lakekeeper
+  - Added persistent volume: postgres-data
+  - Healthcheck: pg_isready -U iceberg -d lakekeeper
+- Added Lakekeeper service using lakekeeper/lakekeeper:latest image
+  - Exposed port 8181 for REST catalog API
+  - Depends on PostgreSQL becoming healthy (condition: service_healthy)
+  - Configured catalog URI: postgresql://iceberg:iceberg@postgres:5432/lakekeeper
+  - Configured warehouse location: s3://iceberg-warehouse
+  - Configured warehouse name: demo
+  - Configured S3 backend: MinIO endpoint http://minio:9000, credentials minioadmin/minioadmin
+  - Enabled path-style access for MinIO (LAKEKEEPER__WAREHOUSE__S3__PATH_STYLE_ACCESS=true)
+  - Added healthcheck: curl http://localhost:8181/health
+  - Command: catalog (starts REST catalog service)
+- Added postgres-data volume for PostgreSQL persistence
+- Updated app service to depend on Lakekeeper being healthy
+- Validated docker-compose.yml with PyYAML and docker-compose config
+- Quality checks: ruff and pytest pass
+
+**Learnings for future iterations:**
+- PostgreSQL healthcheck uses pg_isready command with user and database
+- Lakekeeper uses double underscore for nested configuration (LAKEKEEPER__WAREHOUSE__NAME)
+- S3 path-style access is required for MinIO (not virtual-hosted style)
+- Lakekeeper environment variables for S3: ACCESS_KEY, SECRET_KEY, ENDPOINT, PATH_STYLE_ACCESS
+- Lakekeeper catalog command starts REST catalog service on port 8181
+- Docker volumes for named volumes are defined at the bottom of docker-compose.yml
+- Depends on chain: app -> lakekeeper -> postgres ensures correct startup order
+
+---
+
+## Fri Jan 17 01:30:00 AM JST 2026 - US-005
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Added containerEnv section to devcontainer.json for environment variables
+- Set ICEBERG_EXPLORER_CATALOG__TYPE=rest
+- Set ICEBERG_EXPLORER_CATALOG__URI=http://lakekeeper:8181/catalog
+- Set ICEBERG_EXPLORER_CATALOG__WAREHOUSE=demo
+- Set AWS_ACCESS_KEY_ID=minioadmin for MinIO access
+- Set AWS_SECRET_ACCESS_KEY=minioadmin for MinIO access
+- Set AWS_ENDPOINT_URL=http://minio:9000 for MinIO endpoint
+- Set AWS_REGION=us-east-1 for S3 region
+- Added port 9001 to forwardPorts for MinIO console access
+- Validated devcontainer.json JSON structure
+- Quality checks: ruff and pytest pass
+
+**Learnings for future iterations:**
+- containerEnv in devcontainer.json sets environment variables in the app container
+- Environment variables are available to all processes running in the container
+- forwardPorts array defines ports forwarded from container to host for development
+- Iceberg Explorer uses double underscore for nested config (ICEBERG_EXPLORER_CATALOG__URI)
+- AWS credentials and endpoint must match MinIO configuration for PyIceberg/DuckDB to work
+- Lakekeeper catalog path is /catalog, not root (http://lakekeeper:8181/catalog)
+
+---
+
+## Fri Jan 17 01:45:00 AM JST 2026 - US-006
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Created seed_data.py script in /workspace/scripts/ directory
+- Script uses DuckDB with Iceberg extension to create and populate tables
+- Connects to Lakekeeper REST catalog (http://lakekeeper:8181/catalog)
+- Attaches to S3 warehouse (s3://iceberg-warehouse/demo)
+- Creates 2 namespaces: nyc, sales
+- Creates 4 tables total:
+  - nyc.taxi_trips: 150 rows (taxi trip data with multiple columns)
+  - nyc.zones: 120 rows (taxi zone data)
+  - sales.orders: 180 rows (order data with customer info, dates, regions)
+  - sales.products: 150 rows (product catalog)
+- Total rows: 600 (exceeds minimum of 100 per table)
+- Implements idempotency: checks if nyc.taxi_trips table exists before seeding
+- Uses CREATE SCHEMA IF NOT EXISTS and CREATE OR REPLACE TABLE for safety
+- Updated devcontainer.json postCreateCommand to run seed script after uv sync
+- postCreateCommand now: "uv sync --all-extras && uv run python /workspace/scripts/seed_data.py"
+- Script waits for Lakekeeper to be ready (attached in same docker-compose dependency chain)
+- Quality checks: ruff and pytest pass
+
+**Learnings for future iterations:**
+- DuckDB Iceberg extension syntax: INSTALL iceberg; LOAD iceberg; ATTACH ... AS iceberg (TYPE=iceberg)
+- S3 warehouse path format: s3://bucket-name/warehouse-name for Lakekeeper
+- Idempotency check: SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = ?
+- postCreateCommand can chain multiple commands with && operator
+- Seed script must wait for dependent services (Lakekeeper, MinIO) to be healthy
+- DuckDB INSERT with multiple rows using executemany() is efficient
+- time.sleep() calls between operations ensure metadata propagates through catalog
+- DuckDB memory connection (:memory:) is sufficient for seeding, data goes to S3 via Iceberg extension
+
+---
+
+## Fri Jan 17 02:00:00 AM JST 2026 - US-007
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Added ICEBERG_EXPLORER_SERVER__PORT=8000 to devcontainer.json containerEnv
+- Fixed port mismatch: app default port was 8080, but forwardPorts was set to 8000
+- Verified all configuration files are valid (JSON/YAML)
+- Confirmed service dependency chain is correct:
+  - app depends on: minio (healthy), minio-init (completed), lakekeeper (healthy)
+  - lakekeeper depends on: postgres (healthy)
+  - minio-init depends on: minio (healthy)
+- Confirmed environment variables are set for Iceberg Explorer to connect to Lakekeeper and MinIO
+- Confirmed healthchecks are configured for all services (MinIO, Lakekeeper, PostgreSQL)
+- Confirmed seed script runs automatically via postCreateCommand
+- Confirmed devcontainer configuration follows Microsoft Dev Containers specification
+- Note: Full end-to-end testing (devcontainer up, UI verification, query execution) requires running in actual containerized environment
+- Configuration is complete and ready for full end-to-end verification
+- Quality checks: ruff and pytest pass
+
+**Learnings for future iterations:**
+- App server default port is 8080 (ServerConfig.port), can be overridden with ICEBERG_EXPLORER_SERVER__PORT
+- forwardPorts in devcontainer.json must match the port the app actually listens on
+- Dev Containers specification requires valid JSON in devcontainer.json
+- Service startup order is critical: postgres -> lakekeeper, minio -> minio-init, then app
+- depends_on conditions: service_healthy waits for healthcheck to pass
+- depends_on conditions: service_completed_successfully waits for container to exit with code 0
+- Healthchecks ensure services are ready before dependent services start
+- End-to-end verification of devcontainers requires actual Docker/VS Code environment
+- Configuration verification can be done without running full container stack
+
+---

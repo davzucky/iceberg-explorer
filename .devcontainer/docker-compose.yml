@@ -1,0 +1,112 @@
+version: "3.8"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ..:/workspace/iceberg-explorer:cached
+    command: sleep infinity
+    network_mode: service:minio
+    depends_on:
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      lakekeeper:
+        condition: service_healthy
+    environment:
+      - DEVELOPMENT=true
+
+  minio:
+    image: minio/minio:latest
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5 &&
+      /usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadmin &&
+      /usr/bin/mc mb myminio/iceberg-warehouse --ignore-existing
+      "
+
+  postgres:
+    image: postgres:17
+    environment:
+      - POSTGRES_PASSWORD=postgres
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -p 5432 -d postgres"]
+      interval: 2s
+      timeout: 10s
+      retries: 2
+      start_period: 10s
+    volumes:
+      - volume-lakekeeper:/var/lib/postgresql/data
+
+  migrate:
+    image: ${LAKEKEEPER__SERVER_IMAGE:-quay.io/lakekeeper/catalog:latest-main}
+    pull_policy: always
+    environment:
+      - LAKEKEEPER__PG_ENCRYPTION_KEY=This-is-NOT-Secure!
+      - LAKEKEEPER__PG_DATABASE_URL_READ=postgresql://postgres:postgres@postgres:5432/postgres
+      - LAKEKEEPER__PG_DATABASE_URL_WRITE=postgresql://postgres:postgres@postgres:5432/postgres
+      - LAKEKEEPER__AUTHZ_BACKEND=allowall
+      - LAKEKEEPER__OPENID_PROVIDER_URI
+      - LAKEKEEPER__OPENID_AUDIENCE
+      - LAKEKEEPER__OPENID_ADDITIONAL_ISSUERS
+      - LAKEKEEPER__UI__OPENID_CLIENT_ID
+      - LAKEKEEPER__UI__OPENID_SCOPE
+    restart: "no"
+    command: ["migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  lakekeeper:
+    image: ${LAKEKEEPER__SERVER_IMAGE:-quay.io/lakekeeper/catalog:latest-main}
+    pull_policy: always
+    ports:
+      - "8181:8181"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      - LAKEKEEPER__PG_ENCRYPTION_KEY=This-is-NOT-Secure!
+      - LAKEKEEPER__PG_DATABASE_URL_READ=postgresql://postgres:postgres@postgres:5432/postgres
+      - LAKEKEEPER__PG_DATABASE_URL_WRITE=postgresql://postgres:postgres@postgres:5432/postgres
+      - LAKEKEEPER__AUTHZ_BACKEND=allowall
+      - LAKEKEEPER__OPENID_PROVIDER_URI
+      - LAKEKEEPER__OPENID_AUDIENCE
+      - LAKEKEEPER__OPENID_ADDITIONAL_ISSUERS
+      - LAKEKEEPER__UI__OPENID_CLIENT_ID
+      - LAKEKEEPER__UI__OPENID_SCOPE
+    command: ["serve"]
+    healthcheck:
+      test: ["CMD", "/home/nonroot/lakekeeper", "healthcheck"]
+      interval: 1s
+      timeout: 10s
+      retries: 3
+      start_period: 3s
+
+volumes:
+  volume-lakekeeper:
