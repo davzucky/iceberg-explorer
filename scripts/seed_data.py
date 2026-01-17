@@ -178,7 +178,7 @@ def seed_database() -> None:
             )
 
         conn.executemany(
-            "INSERT INTO iceberg.sales.orders VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+            "INSERT INTO iceberg.sales.orders VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
             orders_data,
         )
         time.sleep(1)

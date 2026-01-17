@@ -10,7 +10,6 @@ Started: Sat Jan 17 12:27:22 AM JST 2026
 - Devcontainer configuration uses `.devcontainer/` directory with `devcontainer.json` and `docker-compose.yml`
 
 ## [Sat Jan 17 2026 12:30 AM] - US-001
-Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
 - Created `.devcontainer/` directory with `devcontainer.json`, `docker-compose.yml`, and `Dockerfile`
 - Devcontainer configured with Python 3.14 base image, uv package manager, and VS Code extensions
 - Docker compose includes app service and MinIO service with healthchecks

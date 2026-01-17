@@ -91,7 +91,7 @@ class DuckDBEngine:
             # Quote the URI to prevent SQL injection (escape single quotes)
             quoted_uri = "'" + catalog_config.uri.replace("'", "''") + "'"
             attach_sql = f"""
-                ATTACH {quoted_uri} AS {quoted_catalog_name} (
+                ATTACH 'iceberg' AS {quoted_catalog_name} (
                     TYPE ICEBERG,
                     ENDPOINT {quoted_uri},
                     AUTHORIZATION_TYPE 'none'

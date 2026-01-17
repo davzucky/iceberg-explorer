@@ -91,7 +91,7 @@ def _bootstrap_catalog() -> None:
 
 
 def _ensure_project() -> str:
-    response = _request("GET", "/management/v1/project") or {}
+    response = _request("GET", "/management/v1/project", expected_status=200) or {}
     if isinstance(response, dict):
         project_id = response.get("project-id")
         project_name = response.get("project-name")
@@ -113,7 +113,7 @@ def _ensure_project() -> str:
 
 
 def _ensure_warehouse(project_id: str) -> str:
-    response = _request("GET", "/management/v1/warehouse") or {}
+    response = _request("GET", "/management/v1/warehouse", expected_status=200) or {}
     if isinstance(response, dict):
         for warehouse in _as_list(response.get("warehouses")):
             if isinstance(warehouse, dict) and warehouse.get("name") == WAREHOUSE_NAME:
