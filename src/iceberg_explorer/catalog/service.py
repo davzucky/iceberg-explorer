@@ -149,10 +149,11 @@ class CatalogService:
             - location: Table location (URI)
             - snapshot_id: Current snapshot ID
             - partition_spec: Partition specification
-            - num_snapshots: Total number of snapshots
+            - snapshots: List of snapshot dictionaries with sequence_number,
+              snapshot_id, timestamp_ms, and manifest_list
 
         Raises:
-            RuntimeError: If catalog type is not supported.
+            RuntimeError: If the catalog type is not supported.
             NoSuchTableError: If a table does not exist.
         """
         table_identifier = tuple(namespace.split(".") + [table_name])
@@ -167,11 +168,21 @@ class CatalogService:
                     for field in spec.fields
                 ]
 
+        snapshots = []
+        for snap in table.metadata.snapshots:
+            snapshot_dict = {
+                "sequence_number": snap.sequence_number,
+                "snapshot_id": snap.snapshot_id,
+                "timestamp_ms": int(snap.timestamp_ms),
+                "manifest_list": snap.manifest_list,
+            }
+            snapshots.append(snapshot_dict)
+
         return {
             "location": table.metadata.location,
             "snapshot_id": table.metadata.current_snapshot_id,
             "partition_spec": partition_spec_info,
-            "num_snapshots": len(table.metadata.snapshots),
+            "snapshots": snapshots,
         }
 
     def get_table_schema(self, namespace: str, table_name: str) -> dict:

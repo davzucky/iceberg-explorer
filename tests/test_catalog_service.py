@@ -189,7 +189,7 @@ class TestCatalogServiceGetTableDetails:
             assert result["location"] == "s3://bucket/table"
             assert result["snapshot_id"] == 12345
             assert result["partition_spec"] is None
-            assert result["num_snapshots"] == 0
+            assert result["snapshots"] == []
             mock_catalog.load_table.assert_called_once_with(("db", "users"))
 
     def test_get_table_details_with_partition_spec(self, mock_settings: Settings):
@@ -218,7 +218,7 @@ class TestCatalogServiceGetTableDetails:
             assert result["partition_spec"] == [
                 {"source_id": 1, "name": "date", "transform": "bucket"}
             ]
-            assert result["num_snapshots"] == 0
+            assert result["snapshots"] == []
             mock_catalog.load_table.assert_called_once_with(("db", "users"))
 
     def test_get_table_details_handles_multi_level_namespace(self, mock_settings: Settings):
@@ -229,7 +229,17 @@ class TestCatalogServiceGetTableDetails:
         mock_table.metadata.location = "s3://bucket/table"
         mock_table.metadata.current_snapshot_id = 67890
         mock_table.metadata.partition_specs = []
-        mock_table.metadata.snapshots = [MagicMock(), MagicMock()]
+        mock_snapshot1 = MagicMock()
+        mock_snapshot1.sequence_number = 1
+        mock_snapshot1.snapshot_id = 111
+        mock_snapshot1.timestamp_ms = 1699999998000
+        mock_snapshot1.manifest_list = "s3://bucket/snap1.avro"
+        mock_snapshot2 = MagicMock()
+        mock_snapshot2.sequence_number = 2
+        mock_snapshot2.snapshot_id = 222
+        mock_snapshot2.timestamp_ms = 1699999999000
+        mock_snapshot2.manifest_list = "s3://bucket/snap2.avro"
+        mock_table.metadata.snapshots = [mock_snapshot1, mock_snapshot2]
         mock_table.metadata.spec.return_value = None
         mock_catalog.load_table.return_value = mock_table
 
@@ -237,7 +247,9 @@ class TestCatalogServiceGetTableDetails:
             result = service.get_table_details("db.schema", "users")
             assert result["location"] == "s3://bucket/table"
             assert result["snapshot_id"] == 67890
-            assert result["num_snapshots"] == 2
+            assert len(result["snapshots"]) == 2
+            assert result["snapshots"][0]["snapshot_id"] == 111
+            assert result["snapshots"][1]["snapshot_id"] == 222
             mock_catalog.load_table.assert_called_once_with(("db", "schema", "users"))
 
     def test_get_table_details_raises_on_nonexistent_table(self, mock_settings: Settings):

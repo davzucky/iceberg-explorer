@@ -541,40 +541,32 @@ class TestTableDetailsModels:
 class TestTableDetailsEndpoint:
     """Tests for GET /api/v1/catalog/tables/{table_path} endpoint."""
 
-    def test_get_table_details_basic(self, client: TestClient, mock_engine: MagicMock):
+    def test_get_table_details_basic(self, client: TestClient, mock_catalog_service: MagicMock):
         """Test getting table details returns correct structure."""
-        mock_conn = MagicMock()
+        mock_catalog_service.get_table_details.return_value = {
+            "location": "s3://bucket/accounting/transactions",
+            "snapshot_id": 12345678901234568,
+            "partition_spec": None,
+            "snapshots": [
+                {
+                    "sequence_number": 1,
+                    "snapshot_id": 12345678901234567,
+                    "timestamp_ms": 1699999998000,
+                    "manifest_list": "s3://bucket/metadata/snap-1.avro",
+                },
+                {
+                    "sequence_number": 2,
+                    "snapshot_id": 12345678901234568,
+                    "timestamp_ms": 1699999999000,
+                    "manifest_list": "s3://bucket/metadata/snap-2.avro",
+                },
+            ],
+        }
 
-        def mock_execute(sql, _params=None):
-            result = MagicMock()
-            if "LIMIT 0" in sql:
-                result.fetchone.return_value = None
-                result.fetchall.return_value = []
-            elif "iceberg_snapshots" in sql:
-                result.fetchall.return_value = [
-                    (1, 12345678901234567, 1699999998000, "s3://bucket/metadata/snap-1.avro"),
-                    (2, 12345678901234568, 1699999999000, "s3://bucket/metadata/snap-2.avro"),
-                ]
-            elif "iceberg_metadata" in sql:
-                result.fetchone.return_value = (
-                    "s3://bucket/accounting/transactions/metadata/manifest.avro",
-                    1,
-                    "DATA",
-                    "ADDED",
-                    "EXISTING",
-                    "data/file.parquet",
-                    "PARQUET",
-                    100,
-                )
-            else:
-                result.fetchall.return_value = []
-            return result
-
-        mock_conn.execute.side_effect = mock_execute
-        mock_engine.get_connection.return_value.__enter__.return_value = mock_conn
-        mock_engine.get_connection.return_value.__exit__.return_value = None
-
-        with patch("iceberg_explorer.api.routes.catalog.get_engine", return_value=mock_engine):
+        with patch(
+            "iceberg_explorer.api.routes.catalog.get_catalog_service",
+            return_value=mock_catalog_service,
+        ):
             response = client.get("/api/v1/catalog/tables/accounting.transactions")
 
         assert response.status_code == 200
@@ -585,40 +577,36 @@ class TestTableDetailsEndpoint:
         assert "location" in data
         assert "snapshots" in data
         assert "current_snapshot" in data
+        mock_catalog_service.get_table_details.assert_called_once_with("accounting", "transactions")
 
-    def test_get_table_details_with_snapshots(self, client: TestClient, mock_engine: MagicMock):
+    def test_get_table_details_with_snapshots(
+        self, client: TestClient, mock_catalog_service: MagicMock
+    ):
         """Test table details includes snapshot history."""
-        mock_conn = MagicMock()
+        mock_catalog_service.get_table_details.return_value = {
+            "location": "s3://bucket/ns/table",
+            "snapshot_id": 222,
+            "partition_spec": None,
+            "snapshots": [
+                {
+                    "sequence_number": 1,
+                    "snapshot_id": 111,
+                    "timestamp_ms": 1699999998000,
+                    "manifest_list": "s3://bucket/metadata/snap-1.avro",
+                },
+                {
+                    "sequence_number": 2,
+                    "snapshot_id": 222,
+                    "timestamp_ms": 1699999999000,
+                    "manifest_list": "s3://bucket/metadata/snap-2.avro",
+                },
+            ],
+        }
 
-        def mock_execute(sql, _params=None):
-            result = MagicMock()
-            if "LIMIT 0" in sql:
-                result.fetchone.return_value = None
-            elif "iceberg_snapshots" in sql:
-                result.fetchall.return_value = [
-                    (1, 111, 1699999998000, "s3://bucket/metadata/snap-1.avro"),
-                    (2, 222, 1699999999000, "s3://bucket/metadata/snap-2.avro"),
-                ]
-            elif "iceberg_metadata" in sql:
-                result.fetchone.return_value = (
-                    "s3://bucket/ns/table/metadata/manifest.avro",
-                    1,
-                    "DATA",
-                    "ADDED",
-                    "EXISTING",
-                    "data/file.parquet",
-                    "PARQUET",
-                    100,
-                )
-            else:
-                result.fetchall.return_value = []
-            return result
-
-        mock_conn.execute.side_effect = mock_execute
-        mock_engine.get_connection.return_value.__enter__.return_value = mock_conn
-        mock_engine.get_connection.return_value.__exit__.return_value = None
-
-        with patch("iceberg_explorer.api.routes.catalog.get_engine", return_value=mock_engine):
+        with patch(
+            "iceberg_explorer.api.routes.catalog.get_catalog_service",
+            return_value=mock_catalog_service,
+        ):
             response = client.get("/api/v1/catalog/tables/ns.table")
 
         assert response.status_code == 200
@@ -627,117 +615,128 @@ class TestTableDetailsEndpoint:
         assert data["snapshots"][0]["sequence_number"] == 1
         assert data["snapshots"][1]["sequence_number"] == 2
         assert data["current_snapshot"]["sequence_number"] == 2
+        mock_catalog_service.get_table_details.assert_called_once_with("ns", "table")
 
-    def test_get_table_details_nested_namespace(self, client: TestClient, mock_engine: MagicMock):
+    def test_get_table_details_nested_namespace(
+        self, client: TestClient, mock_catalog_service: MagicMock
+    ):
         """Test table details with nested namespace using unit separator."""
-        mock_conn = MagicMock()
+        mock_catalog_service.get_table_details.return_value = {
+            "location": "s3://bucket/accounting/tax/records",
+            "snapshot_id": None,
+            "partition_spec": None,
+            "snapshots": [],
+        }
 
-        def mock_execute(sql, _params=None):
-            result = MagicMock()
-            if "LIMIT 0" in sql:
-                result.fetchone.return_value = None
-            elif "iceberg_snapshots" in sql:
-                result.fetchall.return_value = []
-            elif "iceberg_metadata" in sql:
-                result.fetchone.return_value = None
-            else:
-                result.fetchall.return_value = []
-            return result
-
-        mock_conn.execute.side_effect = mock_execute
-        mock_engine.get_connection.return_value.__enter__.return_value = mock_conn
-        mock_engine.get_connection.return_value.__exit__.return_value = None
-
-        with patch("iceberg_explorer.api.routes.catalog.get_engine", return_value=mock_engine):
+        with patch(
+            "iceberg_explorer.api.routes.catalog.get_catalog_service",
+            return_value=mock_catalog_service,
+        ):
             response = client.get("/api/v1/catalog/tables/accounting%1Ftax.records")
 
         assert response.status_code == 200
         data = response.json()
         assert data["namespace"] == ["accounting", "tax"]
         assert data["name"] == "records"
+        mock_catalog_service.get_table_details.assert_called_once_with("accounting.tax", "records")
 
-    def test_get_table_details_not_found(self, client: TestClient, mock_engine: MagicMock):
+    def test_get_table_details_not_found(self, client: TestClient, mock_catalog_service: MagicMock):
         """Test 404 when table doesn't exist."""
-        mock_conn = MagicMock()
-        mock_conn.execute.side_effect = Exception("Table does not exist")
-        mock_engine.get_connection.return_value.__enter__.return_value = mock_conn
-        mock_engine.get_connection.return_value.__exit__.return_value = None
+        from pyiceberg.exceptions import NoSuchTableError
 
-        with patch("iceberg_explorer.api.routes.catalog.get_engine", return_value=mock_engine):
+        mock_catalog_service.get_table_details.side_effect = NoSuchTableError()
+
+        with patch(
+            "iceberg_explorer.api.routes.catalog.get_catalog_service",
+            return_value=mock_catalog_service,
+        ):
             response = client.get("/api/v1/catalog/tables/nonexistent.table")
 
         assert response.status_code == 404
         data = response.json()
         assert "not found" in data["detail"].lower() or "Table" in data["detail"]
 
-    def test_get_table_details_invalid_format(self, client: TestClient, mock_engine: MagicMock):
+    def test_get_table_details_invalid_format(self, client: TestClient):
         """Test 400 when path format is invalid (no dot separator)."""
-        mock_engine.get_connection.return_value.__enter__.return_value = MagicMock()
-        mock_engine.get_connection.return_value.__exit__.return_value = None
-
-        with patch("iceberg_explorer.api.routes.catalog.get_engine", return_value=mock_engine):
-            response = client.get("/api/v1/catalog/tables/invalidpath")
+        response = client.get("/api/v1/catalog/tables/invalidpath")
 
         assert response.status_code == 400
         data = response.json()
         assert "Invalid" in data["detail"]
 
     def test_get_table_details_engine_initialization(
-        self, client: TestClient, mock_engine: MagicMock
+        self, client: TestClient, mock_catalog_service: MagicMock
     ):
-        """Test engine is initialized if not already."""
-        mock_engine.is_initialized = False
-        mock_conn = MagicMock()
+        """Test getting table details works correctly."""
+        mock_catalog_service.get_table_details.return_value = {
+            "location": "s3://bucket/ns/table",
+            "snapshot_id": None,
+            "partition_spec": None,
+            "snapshots": [],
+        }
 
-        def mock_execute(sql, _params=None):
-            result = MagicMock()
-            if "LIMIT 0" in sql:
-                result.fetchone.return_value = None
-            elif "iceberg_snapshots" in sql:
-                result.fetchall.return_value = []
-            elif "iceberg_metadata" in sql:
-                result.fetchone.return_value = None
-            else:
-                result.fetchall.return_value = []
-            return result
-
-        mock_conn.execute.side_effect = mock_execute
-        mock_engine.get_connection.return_value.__enter__.return_value = mock_conn
-        mock_engine.get_connection.return_value.__exit__.return_value = None
-
-        with patch("iceberg_explorer.api.routes.catalog.get_engine", return_value=mock_engine):
+        with patch(
+            "iceberg_explorer.api.routes.catalog.get_catalog_service",
+            return_value=mock_catalog_service,
+        ):
             response = client.get("/api/v1/catalog/tables/ns.table")
 
         assert response.status_code == 200
-        mock_engine.initialize.assert_called_once()
+        mock_catalog_service.get_table_details.assert_called_once_with("ns", "table")
 
-    def test_get_table_details_no_snapshots(self, client: TestClient, mock_engine: MagicMock):
+    def test_get_table_details_no_snapshots(
+        self, client: TestClient, mock_catalog_service: MagicMock
+    ):
         """Test table details when no snapshots available."""
-        mock_conn = MagicMock()
+        mock_catalog_service.get_table_details.return_value = {
+            "location": "s3://bucket/ns/emptytable",
+            "snapshot_id": None,
+            "partition_spec": None,
+            "snapshots": [],
+        }
 
-        def mock_execute(sql, _params=None):
-            result = MagicMock()
-            if "LIMIT 0" in sql:
-                result.fetchone.return_value = None
-            elif "iceberg_snapshots" in sql:
-                result.fetchall.return_value = []
-            elif "iceberg_metadata" in sql:
-                result.fetchone.return_value = None
-            else:
-                result.fetchall.return_value = []
-            return result
-
-        mock_conn.execute.side_effect = mock_execute
-        mock_engine.get_connection.return_value.__enter__.return_value = mock_conn
-        mock_engine.get_connection.return_value.__exit__.return_value = None
-
-        with patch("iceberg_explorer.api.routes.catalog.get_engine", return_value=mock_engine):
+        with patch(
+            "iceberg_explorer.api.routes.catalog.get_catalog_service",
+            return_value=mock_catalog_service,
+        ):
             response = client.get("/api/v1/catalog/tables/ns.emptytable")
 
         assert response.status_code == 200
         data = response.json()
         assert data["snapshots"] == []
         assert data["current_snapshot"] is None
+        mock_catalog_service.get_table_details.assert_called_once_with("ns", "emptytable")
+
+    def test_get_table_details_with_partition_spec(
+        self, client: TestClient, mock_catalog_service: MagicMock
+    ):
+        """Test table details includes partition spec."""
+        mock_catalog_service.get_table_details.return_value = {
+            "location": "s3://bucket/ns/table",
+            "snapshot_id": 123,
+            "partition_spec": [
+                {"source_id": 1, "name": "dt", "transform": "day"},
+                {"source_id": 2, "name": "region", "transform": "identity"},
+            ],
+            "snapshots": [],
+        }
+
+        with patch(
+            "iceberg_explorer.api.routes.catalog.get_catalog_service",
+            return_value=mock_catalog_service,
+        ):
+            response = client.get("/api/v1/catalog/tables/ns.table")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["partition_spec"] is not None
+        assert data["partition_spec"]["spec_id"] == 0
+        assert len(data["partition_spec"]["fields"]) == 2
+        assert data["partition_spec"]["fields"][0]["name"] == "dt"
+        assert data["partition_spec"]["fields"][0]["transform"] == "day"
+        assert data["partition_spec"]["fields"][1]["name"] == "region"
+        assert data["partition_spec"]["fields"][1]["transform"] == "identity"
+        mock_catalog_service.get_table_details.assert_called_once_with("ns", "table")
 
 
 class TestParseTablePath:

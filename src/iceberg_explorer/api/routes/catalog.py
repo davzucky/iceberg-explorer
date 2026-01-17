@@ -23,10 +23,10 @@ from iceberg_explorer.models.catalog import (
     ColumnStatistics,
     ListNamespacesResponse,
     ListTablesResponse,
+    PartitionField,
     PartitionSpec,
     SchemaField,
     Snapshot,
-    SortOrder,
     TableDetails,
     TableIdentifier,
     TableSchemaResponse,
@@ -305,93 +305,61 @@ async def get_table_details(
     Raises:
         HTTPException: 404 if table doesn't exist, 400 if path format is invalid.
     """
-    engine = get_engine()
+    from pyiceberg.exceptions import NoSuchTableError
 
-    if not engine.is_initialized:
-        engine.initialize()
+    catalog_service = get_catalog_service()
 
     try:
         namespace_parts, table_name = _parse_table_path(table_path)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
-    catalog_name = engine.catalog_name
+    namespace_str = ".".join(namespace_parts)
 
-    with engine.get_connection() as conn:
-        namespace_path = _build_namespace_path(catalog_name, namespace_parts)
-        quoted_table = _quote_identifier(table_name)
-        full_table_path = f"{namespace_path}.{quoted_table}"
+    try:
+        details = catalog_service.get_table_details(namespace_str, table_name)
+    except NoSuchTableError as e:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Table not found: {namespace_str}.{table_name}",
+        ) from e
 
-        try:
-            conn.execute(f"SELECT * FROM {full_table_path} LIMIT 0")
-        except Exception as e:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Table not found: {'.'.join(namespace_parts)}.{table_name}",
-            ) from e
+    snapshots: list[Snapshot] = []
+    current_snapshot: Snapshot | None = None
+    for snap_dict in details["snapshots"]:
+        snapshot = Snapshot(
+            sequence_number=snap_dict["sequence_number"],
+            snapshot_id=snap_dict["snapshot_id"],
+            timestamp_ms=snap_dict["timestamp_ms"],
+            manifest_list=snap_dict["manifest_list"],
+        )
+        snapshots.append(snapshot)
 
-        snapshots: list[Snapshot] = []
-        current_snapshot: Snapshot | None = None
-        try:
-            unquoted_path = f"{catalog_name}.{'.'.join(namespace_parts)}.{table_name}"
-            snapshot_result = conn.execute(
-                "SELECT sequence_number, snapshot_id, timestamp_ms, manifest_list FROM iceberg_snapshots(?)",
-                [unquoted_path],
-            ).fetchall()
+    if snapshots:
+        current_snapshot = max(snapshots, key=lambda s: s.sequence_number)
 
-            for row in snapshot_result:
-                timestamp_ms = row[2]
-                if hasattr(timestamp_ms, "timestamp"):
-                    timestamp_ms = int(timestamp_ms.timestamp() * 1000)
-                elif isinstance(timestamp_ms, str):
-                    from datetime import datetime
-
-                    dt = datetime.fromisoformat(timestamp_ms.replace("Z", "+00:00"))
-                    timestamp_ms = int(dt.timestamp() * 1000)
-                else:
-                    timestamp_ms = int(timestamp_ms)
-
-                snapshot = Snapshot(
-                    sequence_number=int(row[0]),
-                    snapshot_id=int(row[1]),
-                    timestamp_ms=timestamp_ms,
-                    manifest_list=row[3] if row[3] else None,
-                )
-                snapshots.append(snapshot)
-
-            if snapshots:
-                current_snapshot = max(snapshots, key=lambda s: s.sequence_number)
-        except Exception as e:
-            logger.debug("Failed to fetch snapshots for table: %s", e)
-
-        partition_spec: PartitionSpec | None = None
-        sort_order: SortOrder | None = None
-        location: str | None = None
-
-        try:
-            metadata_result = conn.execute(
-                "SELECT * FROM iceberg_metadata(?) LIMIT 1",
-                [unquoted_path],
-            ).fetchone()
-            if metadata_result:
-                manifest_path = metadata_result[0]
-                if manifest_path:
-                    path_parts = manifest_path.split("/metadata/")
-                    if len(path_parts) > 1:
-                        location = path_parts[0]
-        except Exception as e:
-            logger.debug("Failed to fetch metadata for table location: %s", e)
-
-        if location is None:
-            location = f"s3://{catalog_name}/{'.'.join(namespace_parts)}/{table_name}"
+    partition_spec: PartitionSpec | None = None
+    partition_spec_info = details["partition_spec"]
+    if partition_spec_info:
+        spec_id = 0
+        fields = []
+        for field_dict in partition_spec_info:
+            field = PartitionField(
+                source_id=field_dict["source_id"],
+                field_id=1000 + len(fields),
+                name=field_dict["name"],
+                transform=field_dict["transform"],
+            )
+            fields.append(field)
+        partition_spec = PartitionSpec(spec_id=spec_id, fields=fields)
 
     return TableDetails(
         namespace=namespace_parts,
         name=table_name,
-        location=location,
+        location=details["location"],
         format="ICEBERG",
         partition_spec=partition_spec,
-        sort_order=sort_order,
+        sort_order=None,
         current_snapshot=current_snapshot,
         snapshots=snapshots,
     )
