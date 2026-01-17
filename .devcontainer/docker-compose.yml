@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: Dockerfile
     volumes:
-      - ../..:/workspace:cached
+      - ..:/workspace/iceberg-explorer:cached
     command: sleep infinity
     network_mode: service:minio
     depends_on:
@@ -50,40 +50,63 @@ services:
       "
 
   postgres:
-    image: postgres:15
+    image: postgres:17
     environment:
-      - POSTGRES_USER=iceberg
-      - POSTGRES_PASSWORD=iceberg
-      - POSTGRES_DB=lakekeeper
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - POSTGRES_PASSWORD=postgres
+      - PGDATA=/var/lib/postgresql/data/pgdata
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U iceberg -d lakekeeper"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      test: ["CMD-SHELL", "pg_isready -U postgres -p 5432 -d postgres"]
+      interval: 2s
+      timeout: 10s
+      retries: 2
+      start_period: 10s
+    volumes:
+      - volume-lakekeeper:/var/lib/postgresql/data
 
-  lakekeeper:
-    image: lakekeeper/lakekeeper:latest
-    ports:
-      - "8181:8181"
+  migrate:
+    image: ${LAKEKEEPER__SERVER_IMAGE:-quay.io/lakekeeper/catalog:latest-main}
+    pull_policy: always
+    environment:
+      - LAKEKEEPER__PG_ENCRYPTION_KEY=This-is-NOT-Secure!
+      - LAKEKEEPER__PG_DATABASE_URL_READ=postgresql://postgres:postgres@postgres:5432/postgres
+      - LAKEKEEPER__PG_DATABASE_URL_WRITE=postgresql://postgres:postgres@postgres:5432/postgres
+      - LAKEKEEPER__AUTHZ_BACKEND=allowall
+      - LAKEKEEPER__OPENID_PROVIDER_URI
+      - LAKEKEEPER__OPENID_AUDIENCE
+      - LAKEKEEPER__OPENID_ADDITIONAL_ISSUERS
+      - LAKEKEEPER__UI__OPENID_CLIENT_ID
+      - LAKEKEEPER__UI__OPENID_SCOPE
+    restart: "no"
+    command: ["migrate"]
     depends_on:
       postgres:
         condition: service_healthy
+
+  lakekeeper:
+    image: ${LAKEKEEPER__SERVER_IMAGE:-quay.io/lakekeeper/catalog:latest-main}
+    pull_policy: always
+    ports:
+      - "8181:8181"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     environment:
-      - LAKEKEEPER__CATALOG__URI=postgresql://iceberg:iceberg@postgres:5432/lakekeeper
-      - LAKEKEEPER__WAREHOUSE__LOCATION=s3://iceberg-warehouse
-      - LAKEKEEPER__WAREHOUSE__NAME=demo
-      - LAKEKEEPER__WAREHOUSE__S3__ENDPOINT=http://minio:9000
-      - LAKEKEEPER__WAREHOUSE__S3__ACCESS_KEY=minioadmin
-      - LAKEKEEPER__WAREHOUSE__S3__SECRET_KEY=minioadmin
-      - LAKEKEEPER__WAREHOUSE__S3__PATH_STYLE_ACCESS=true
-    command: catalog
+      - LAKEKEEPER__PG_ENCRYPTION_KEY=This-is-NOT-Secure!
+      - LAKEKEEPER__PG_DATABASE_URL_READ=postgresql://postgres:postgres@postgres:5432/postgres
+      - LAKEKEEPER__PG_DATABASE_URL_WRITE=postgresql://postgres:postgres@postgres:5432/postgres
+      - LAKEKEEPER__AUTHZ_BACKEND=allowall
+      - LAKEKEEPER__OPENID_PROVIDER_URI
+      - LAKEKEEPER__OPENID_AUDIENCE
+      - LAKEKEEPER__OPENID_ADDITIONAL_ISSUERS
+      - LAKEKEEPER__UI__OPENID_CLIENT_ID
+      - LAKEKEEPER__UI__OPENID_SCOPE
+    command: ["serve"]
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8181/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      test: ["CMD", "/home/nonroot/lakekeeper", "healthcheck"]
+      interval: 1s
+      timeout: 10s
+      retries: 3
+      start_period: 3s
 
 volumes:
-  postgres-data:
+  volume-lakekeeper:

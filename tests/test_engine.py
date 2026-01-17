@@ -146,7 +146,8 @@ class TestDuckDBEngineCatalogAttachment:
             calls = [str(call) for call in mock_execute.call_args_list]
             assert any("INSTALL iceberg" in c for c in calls)
             assert any("LOAD iceberg" in c for c in calls)
-            assert any("ENDPOINT_TYPE REST" in c for c in calls)
+            assert any("ENDPOINT" in c for c in calls)
+            assert any("AUTHORIZATION_TYPE 'none'" in c for c in calls)
             assert any("http://localhost:8181" in c for c in calls)
 
 
@@ -162,7 +163,8 @@ class TestDuckDBEngineHealthCheck:
         assert result["healthy"] is False
         assert result["duckdb"] is False
         assert result["catalog"] is False
-        assert "not initialized" in result.get("error", "")
+        error = str(result.get("error", ""))
+        assert "not initialized" in error
 
     def test_health_check_duckdb_ok(self, mock_settings: Settings):
         """Test health check passes for DuckDB when connection works."""
@@ -188,7 +190,8 @@ class TestDuckDBEngineHealthCheck:
 
         assert result["healthy"] is False
         assert result["duckdb"] is False
-        assert "DuckDB error" in result.get("error", "")
+        error = str(result.get("error", ""))
+        assert "DuckDB error" in error
 
 
 class TestGlobalEngine:

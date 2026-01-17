@@ -93,7 +93,8 @@ class DuckDBEngine:
             attach_sql = f"""
                 ATTACH {quoted_uri} AS {quoted_catalog_name} (
                     TYPE ICEBERG,
-                    ENDPOINT_TYPE REST
+                    ENDPOINT {quoted_uri},
+                    AUTHORIZATION_TYPE 'none'
                 )
             """
         else:

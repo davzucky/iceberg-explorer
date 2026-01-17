@@ -2,7 +2,8 @@
   "name": "Iceberg Explorer Dev",
   "dockerComposeFile": "docker-compose.yml",
   "service": "app",
-  "workspaceFolder": "/workspace",
+  "workspaceFolder": "/workspace/iceberg-explorer",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace/iceberg-explorer,type=bind",
   "features": {
     "ghcr.io/devcontainers/features/common-utils:2": {
       "installZsh": true,
@@ -11,7 +12,8 @@
     },
     "ghcr.io/devcontainers/features/git:1": {
       "version": "latest"
-    }
+    },
+    "ghcr.io/devcontainers-extra/features/opencode:1": {}
   },
   "customizations": {
     "vscode": {
@@ -29,11 +31,10 @@
       }
     }
   },
-  "postCreateCommand": "uv sync --all-extras && uv run python /workspace/scripts/seed_data.py",
+  "postCreateCommand": "python /workspace/iceberg-explorer/scripts/bootstrap_lakekeeper.py && uv sync --all-extras && uv run python /workspace/iceberg-explorer/scripts/seed_data.py",
   "containerEnv": {
     "ICEBERG_EXPLORER_CATALOG__TYPE": "rest",
-    "ICEBERG_EXPLORER_CATALOG__URI": "http://lakekeeper:8181/catalog",
-    "ICEBERG_EXPLORER_CATALOG__WAREHOUSE": "demo",
+    "ICEBERG_EXPLORER_CONFIG": "/home/vscode/.config/iceberg-explorer/lakekeeper-config.json",
     "ICEBERG_EXPLORER_SERVER__PORT": "8000",
     "AWS_ACCESS_KEY_ID": "minioadmin",
     "AWS_SECRET_ACCESS_KEY": "minioadmin",

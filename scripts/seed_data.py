@@ -1,5 +1,6 @@
 """Seed script to populate Iceberg catalog with sample data."""
 
+import json
 import time
 from datetime import datetime
 
@@ -13,15 +14,19 @@ def seed_database() -> None:
     try:
         conn.execute("INSTALL iceberg; LOAD iceberg;")
 
-        catalog_uri = "http://lakekeeper:8181/catalog"
-        warehouse = "demo"
+        settings_path = "/home/vscode/.config/iceberg-explorer/lakekeeper-config.json"
+        with open(settings_path, encoding="utf-8") as config_file:
+            catalog_config = json.load(config_file)["catalog"]
 
-        conn.execute(f"""
-            ATTACH '{catalog_uri}' AS iceberg (
-                TYPE = iceberg,
-                WAREHOUSE = 's3://iceberg-warehouse/{warehouse}'
-            )
-        """)
+        catalog_uri = catalog_config["uri"]
+        warehouse = catalog_config["warehouse"]
+        attach_options = [
+            "TYPE ICEBERG",
+            f"ENDPOINT '{catalog_uri}'",
+            "AUTHORIZATION_TYPE 'none'",
+        ]
+
+        conn.execute(f"ATTACH '{warehouse}' AS iceberg (" + ", ".join(attach_options) + ")")
 
         print(f"Attached to catalog: {catalog_uri}")
         time.sleep(2)
@@ -43,7 +48,7 @@ def seed_database() -> None:
 
         print("Creating table: iceberg.nyc.taxi_trips")
         conn.execute("""
-            CREATE OR REPLACE TABLE iceberg.nyc.taxi_trips (
+            CREATE TABLE IF NOT EXISTS iceberg.nyc.taxi_trips (
                 id BIGINT,
                 vendor_id INTEGER,
                 pickup_datetime TIMESTAMP,
@@ -58,7 +63,7 @@ def seed_database() -> None:
                 mta_tax DOUBLE,
                 tip_amount DOUBLE,
                 tolls_amount DOUBLE,
-                imp_surcharge DOUBLE,
+                improvement_surcharge DOUBLE,
                 total_amount DOUBLE
             );
         """)
@@ -89,14 +94,14 @@ def seed_database() -> None:
             )
 
         conn.executemany(
-            "INSERT INTO iceberg.nyc.taxi_trips VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+            "INSERT INTO iceberg.nyc.taxi_trips VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
             taxi_trips_data,
         )
         time.sleep(1)
 
         print("Creating table: iceberg.nyc.zones")
         conn.execute("""
-            CREATE OR REPLACE TABLE iceberg.nyc.zones (
+            CREATE TABLE IF NOT EXISTS iceberg.nyc.zones (
                 zone_id INTEGER,
                 borough VARCHAR(50),
                 zone VARCHAR(100),
@@ -124,7 +129,7 @@ def seed_database() -> None:
 
         print("Creating table: iceberg.sales.orders")
         conn.execute("""
-            CREATE OR REPLACE TABLE iceberg.sales.orders (
+            CREATE TABLE IF NOT EXISTS iceberg.sales.orders (
                 order_id BIGINT,
                 customer_id INTEGER,
                 order_date DATE,
@@ -180,7 +185,7 @@ def seed_database() -> None:
 
         print("Creating table: iceberg.sales.products")
         conn.execute("""
-            CREATE OR REPLACE TABLE iceberg.sales.products (
+            CREATE TABLE IF NOT EXISTS iceberg.sales.products (
                 product_id INTEGER,
                 product_name VARCHAR(100),
                 category VARCHAR(50),
@@ -213,7 +218,8 @@ def seed_database() -> None:
             )
 
         conn.executemany(
-            "INSERT INTO iceberg.sales.products VALUES (?, ?, ?, ?, ?, ?);", products_data
+            "INSERT INTO iceberg.sales.products VALUES (?, ?, ?, ?, ?, ?);",
+            products_data,
         )
 
         print("\nSeeding completed successfully!")
