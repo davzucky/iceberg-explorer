@@ -144,7 +144,7 @@ class CatalogService:
 
         Raises:
             RuntimeError: If catalog type is not supported.
-            NoSuchTableError: If the table does not exist.
+            NoSuchTableError: If a table does not exist.
         """
         table_identifier = tuple(namespace.split(".") + [table_name])
         table = self.catalog.load_table(table_identifier)
@@ -163,6 +163,39 @@ class CatalogService:
             "snapshot_id": table.metadata.current_snapshot_id,
             "partition_spec": partition_spec_info,
             "num_snapshots": len(table.metadata.snapshots),
+        }
+
+    def get_table_schema(self, namespace: str, table_name: str) -> dict:
+        """Get schema for a table.
+
+        Args:
+            namespace: Namespace identifier (e.g., "db" or "db.schema").
+            table_name: Name of the table.
+
+        Returns:
+            Dictionary containing schema fields with names, types, and nullability.
+
+        Raises:
+            RuntimeError: If catalog type is not supported.
+            NoSuchTableError: If a table does not exist.
+        """
+        table_identifier = tuple(namespace.split(".") + [table_name])
+        table = self.catalog.load_table(table_identifier)
+        schema = table.schema()
+
+        fields = []
+        for field in schema.fields:
+            fields.append(
+                {
+                    "name": field.name,
+                    "type": str(field.field_type),
+                    "nullable": field.optional,
+                }
+            )
+
+        return {
+            "schema_id": schema.schema_id,
+            "fields": fields,
         }
 
     def close(self) -> None:

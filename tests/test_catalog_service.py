@@ -252,3 +252,85 @@ class TestCatalogServiceGetTableDetails:
             with pytest.raises(NoSuchTableError):
                 service.get_table_details("db", "nonexistent")
             mock_catalog.load_table.assert_called_once_with(("db", "nonexistent"))
+
+
+class TestCatalogServiceGetTableSchema:
+    """Tests for get_table_schema method."""
+
+    def test_get_table_schema_returns_schema(self, mock_settings: Settings):
+        """Test getting table schema returns field information."""
+        service = CatalogService(settings=mock_settings)
+        mock_catalog = MagicMock()
+        mock_table = MagicMock()
+        mock_field1 = MagicMock()
+        mock_field1.name = "id"
+        mock_field1.field_type = "long"
+        mock_field1.optional = False
+        mock_field2 = MagicMock()
+        mock_field2.name = "name"
+        mock_field2.field_type = "string"
+        mock_field2.optional = True
+        mock_schema = MagicMock()
+        mock_schema.schema_id = 1
+        mock_schema.fields = [mock_field1, mock_field2]
+        mock_table.schema.return_value = mock_schema
+        mock_catalog.load_table.return_value = mock_table
+
+        with patch.object(service, "_catalog", mock_catalog):
+            result = service.get_table_schema("db", "users")
+            assert result["schema_id"] == 1
+            assert len(result["fields"]) == 2
+            assert result["fields"][0]["name"] == "id"
+            assert result["fields"][0]["type"] == "long"
+            assert result["fields"][0]["nullable"] is False
+            assert result["fields"][1]["name"] == "name"
+            assert result["fields"][1]["type"] == "string"
+            assert result["fields"][1]["nullable"] is True
+            mock_catalog.load_table.assert_called_once_with(("db", "users"))
+
+    def test_get_table_schema_handles_empty_schema(self, mock_settings: Settings):
+        """Test getting table schema with no fields."""
+        service = CatalogService(settings=mock_settings)
+        mock_catalog = MagicMock()
+        mock_table = MagicMock()
+        mock_schema = MagicMock()
+        mock_schema.schema_id = 1
+        mock_schema.fields = []
+        mock_table.schema.return_value = mock_schema
+        mock_catalog.load_table.return_value = mock_table
+
+        with patch.object(service, "_catalog", mock_catalog):
+            result = service.get_table_schema("db", "empty_table")
+            assert result["schema_id"] == 1
+            assert result["fields"] == []
+            mock_catalog.load_table.assert_called_once_with(("db", "empty_table"))
+
+    def test_get_table_schema_handles_multi_level_namespace(self, mock_settings: Settings):
+        """Test getting table schema in multi-level namespace."""
+        service = CatalogService(settings=mock_settings)
+        mock_catalog = MagicMock()
+        mock_table = MagicMock()
+        mock_schema = MagicMock()
+        mock_schema.schema_id = 42
+        mock_schema.fields = []
+        mock_table.schema.return_value = mock_schema
+        mock_catalog.load_table.return_value = mock_table
+
+        with patch.object(service, "_catalog", mock_catalog):
+            result = service.get_table_schema("db.schema", "users")
+            assert result["schema_id"] == 42
+            assert result["fields"] == []
+            mock_catalog.load_table.assert_called_once_with(("db", "schema", "users"))
+
+    def test_get_table_schema_raises_on_nonexistent_table(self, mock_settings: Settings):
+        """Test getting schema from non-existent table raises error."""
+        from pyiceberg.exceptions import NoSuchTableError
+
+        service = CatalogService(settings=mock_settings)
+        mock_catalog = MagicMock()
+        mock_catalog.load_table.side_effect = NoSuchTableError()
+
+        with patch.object(service, "_catalog", mock_catalog):
+            with pytest.raises(NoSuchTableError):
+                service.get_table_schema("db", "nonexistent")
+            mock_catalog.load_table.assert_called_once_with(("db", "nonexistent"))
