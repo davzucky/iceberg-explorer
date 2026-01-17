@@ -97,6 +97,20 @@ class CatalogService:
         else:
             raise RuntimeError(f"Unsupported catalog type: {catalog_type}")
 
+    def list_namespaces(self) -> list[str]:
+        """List all namespaces in the catalog.
+
+        Returns:
+            List of namespace identifiers as strings. Multi-level namespaces
+            are represented with dot separators (e.g., "db.schema").
+            Returns an empty list if the catalog has no namespaces.
+
+        Raises:
+            RuntimeError: If catalog type is not supported.
+        """
+        namespaces = self.catalog.list_namespaces()
+        return [".".join(ns) for ns in namespaces]
+
     def close(self) -> None:
         """Close the catalog connection.
 

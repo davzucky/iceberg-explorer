@@ -37,3 +37,17 @@ Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
   - Lazy initialization pattern: use @property to initialize on first access
   - Use TYPE_CHECKING to avoid circular imports while maintaining type hints
 ---
+
+## [2026-01-17] - US-004
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Added list_namespaces() method to CatalogService
+- Calls PyIceberg catalog.list_namespaces() via catalog property
+- Returns list of namespace strings (joins multi-level with dot separator)
+- Handles empty catalog gracefully (returns empty list)
+- Added 5 unit tests in tests/test_catalog_service.py
+- Files changed: src/iceberg_explorer/catalog/service.py, tests/test_catalog_service.py
+- **Learnings for future iterations:**
+  - PyIceberg catalog.list_namespaces() returns list of tuples (e.g., ("db", "schema"))
+  - Use ".".join(ns) to convert namespace tuples to string identifiers
+  - Unit test pattern: use patch.object to mock internal attributes like _catalog
+---
