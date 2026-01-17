@@ -1,0 +1,244 @@
+{
+  "project": "Iceberg Explorer",
+  "branchName": "ralph/pyiceberg-catalog-integration",
+  "description": "Refactor catalog operations to use PyIceberg instead of DuckDB - PyIceberg handles catalog metadata operations while DuckDB is dedicated to SQL query execution only.",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Add PyIceberg dependency",
+      "description": "As a developer, I need PyIceberg added to the project dependencies so the application can use it for catalog operations.",
+      "acceptanceCriteria": [
+        "Add pyiceberg[pyarrow] to pyproject.toml dependencies",
+        "Run uv sync to update lock file",
+        "Import pyiceberg succeeds in Python",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Update configuration for PyIceberg REST catalog",
+      "description": "As a developer, I need configuration options for PyIceberg REST catalog so the application can connect to various catalog backends.",
+      "acceptanceCriteria": [
+        "Add catalog configuration section to config.py with fields: type, uri, warehouse",
+        "Support ICEBERG_EXPLORER_CATALOG__TYPE env var (default: rest)",
+        "Support ICEBERG_EXPLORER_CATALOG__URI env var for REST catalog endpoint",
+        "Support ICEBERG_EXPLORER_CATALOG__WAREHOUSE env var for warehouse name",
+        "Support optional S3/credential configuration passthrough",
+        "Existing tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Create CatalogService class with initialization",
+      "description": "As a developer, I need a CatalogService class that wraps PyIceberg catalog operations and initializes from configuration.",
+      "acceptanceCriteria": [
+        "Create new file src/iceberg_explorer/catalog/service.py",
+        "CatalogService class accepts configuration and creates PyIceberg REST catalog",
+        "Catalog connection is lazy-initialized on first use",
+        "Service is a singleton or properly managed lifecycle",
+        "Add __init__.py to catalog module",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Implement namespace listing in CatalogService",
+      "description": "As a user, I want to list namespaces from the catalog so I can browse the data lake structure.",
+      "acceptanceCriteria": [
+        "Add list_namespaces() method to CatalogService",
+        "Method calls PyIceberg catalog.list_namespaces()",
+        "Returns list of namespace tuples/strings",
+        "Handles empty catalog gracefully",
+        "Add unit test for list_namespaces",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Implement table listing in CatalogService",
+      "description": "As a user, I want to list tables within a namespace so I can see available data.",
+      "acceptanceCriteria": [
+        "Add list_tables(namespace) method to CatalogService",
+        "Method calls PyIceberg catalog.list_tables(namespace)",
+        "Returns list of table identifiers",
+        "Handles non-existent namespace with appropriate error",
+        "Add unit test for list_tables",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Implement table details in CatalogService",
+      "description": "As a user, I want to view table details so I can understand the table structure and metadata.",
+      "acceptanceCriteria": [
+        "Add get_table_details(namespace, table_name) method to CatalogService",
+        "Method calls PyIceberg catalog.load_table()",
+        "Returns table location, current snapshot ID, partition spec",
+        "Handles non-existent table with appropriate error",
+        "Add unit test for get_table_details",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Implement table schema retrieval in CatalogService",
+      "description": "As a user, I want to view table schema so I can understand column names and types.",
+      "acceptanceCriteria": [
+        "Add get_table_schema(namespace, table_name) method to CatalogService",
+        "Method uses PyIceberg table.schema()",
+        "Returns schema with field names, types, and nullability",
+        "Schema format matches existing API response format",
+        "Add unit test for get_table_schema",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Update namespace listing API route",
+      "description": "As a user, I want the /api/v1/catalog/namespaces endpoint to use PyIceberg so I get accurate namespace data.",
+      "acceptanceCriteria": [
+        "Modify GET /api/v1/catalog/namespaces to use CatalogService",
+        "Remove DuckDB-based namespace listing code",
+        "Response format remains backward compatible",
+        "Existing API tests pass or are updated",
+        "Typecheck passes"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-009",
+      "title": "Update table listing API route",
+      "description": "As a user, I want the /api/v1/catalog/namespaces/{ns}/tables endpoint to use PyIceberg so I get accurate table listings.",
+      "acceptanceCriteria": [
+        "Modify GET /api/v1/catalog/namespaces/{namespace}/tables to use CatalogService",
+        "Remove DuckDB-based table listing code",
+        "Response format remains backward compatible",
+        "Handle multi-level namespaces with unit separator decoding",
+        "Existing API tests pass or are updated",
+        "Typecheck passes"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-010",
+      "title": "Update table details API route",
+      "description": "As a user, I want the /api/v1/catalog/tables/{path} endpoint to use PyIceberg so I get richer table metadata.",
+      "acceptanceCriteria": [
+        "Modify GET /api/v1/catalog/tables/{namespace}.{table} to use CatalogService",
+        "Remove DuckDB-based table details code",
+        "Response includes location, snapshot info, partition spec",
+        "Response format remains backward compatible",
+        "Existing API tests pass or are updated",
+        "Typecheck passes"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-011",
+      "title": "Update table schema API route",
+      "description": "As a user, I want the /api/v1/catalog/tables/{path}/schema endpoint to use PyIceberg so I get accurate schema information.",
+      "acceptanceCriteria": [
+        "Modify GET /api/v1/catalog/tables/{namespace}.{table}/schema to use CatalogService",
+        "Remove DuckDB-based schema retrieval code",
+        "Response format remains backward compatible",
+        "Existing API tests pass or are updated",
+        "Typecheck passes"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-012",
+      "title": "Update DuckDB engine for query-only usage",
+      "description": "As a developer, I want DuckDB to be used only for SQL query execution so there is clean separation of concerns.",
+      "acceptanceCriteria": [
+        "Review and clean up query/engine.py to remove catalog metadata functions",
+        "Ensure DuckDB Iceberg extension is still loaded for query execution",
+        "Query execution continues to work against Iceberg tables",
+        "Remove unused imports and dead code",
+        "Existing query tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-013",
+      "title": "Add PyIceberg catalog health check",
+      "description": "As an operator, I want the health endpoint to check PyIceberg catalog connectivity so I can monitor system health.",
+      "acceptanceCriteria": [
+        "Modify GET /health to include catalog connectivity check",
+        "Health check attempts to list namespaces as connectivity test",
+        "Response includes catalog status: healthy/unhealthy",
+        "Unhealthy catalog degrades overall health but doesn't fail completely",
+        "Existing health tests pass or are updated",
+        "Typecheck passes"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-014",
+      "title": "Verify UI namespace tree works",
+      "description": "As a user, I want the namespace tree in the UI sidebar to work correctly with the new PyIceberg backend.",
+      "acceptanceCriteria": [
+        "Namespace tree loads and displays namespaces from PyIceberg",
+        "Expanding a namespace shows tables within it",
+        "Clicking a table shows table details",
+        "HTMX lazy loading continues to work",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-015",
+      "title": "Add integration tests for PyIceberg catalog",
+      "description": "As a developer, I want integration tests to verify PyIceberg catalog operations work correctly.",
+      "acceptanceCriteria": [
+        "Create tests/test_catalog_service.py with integration tests",
+        "Tests cover: list_namespaces, list_tables, get_table_details, get_table_schema",
+        "Tests use fixtures or mocks for PyIceberg catalog",
+        "Tests handle catalog not available scenario",
+        "All new tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

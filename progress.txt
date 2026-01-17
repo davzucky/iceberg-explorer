@@ -1,0 +1,12 @@
+## Codebase Patterns
+
+## [2026-01-17] - US-001
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Added pyiceberg[pyarrow]>=0.7.0 to pyproject.toml dependencies
+- Updated uv.lock via uv sync
+- Verified pyiceberg import works (version 0.10.0)
+- Files changed: pyproject.toml, uv.lock
+- **Learnings for future iterations:**
+  - To run ruff with all dev dependencies, use `uv run --all-extras ruff check src/ tests/`
+  - PyIceberg successfully installed with pyarrow extras for Arrow integration
+---
