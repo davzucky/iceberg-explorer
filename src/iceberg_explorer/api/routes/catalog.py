@@ -349,12 +349,12 @@ async def get_table_details(
     partition_spec: PartitionSpec | None = None
     partition_spec_info = details["partition_spec"]
     if partition_spec_info:
-        spec_id = 0
+        spec_id = partition_spec_info.get("spec_id", 0)
         fields = []
-        for field_dict in partition_spec_info:
+        for field_dict in partition_spec_info.get("fields", []):
             field = PartitionField(
                 source_id=field_dict["source_id"],
-                field_id=1000 + len(fields),
+                field_id=field_dict.get("field_id", 1000 + len(fields)),
                 name=field_dict["name"],
                 transform=field_dict["transform"],
             )

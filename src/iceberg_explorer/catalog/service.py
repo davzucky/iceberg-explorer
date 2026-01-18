@@ -45,22 +45,28 @@ class CatalogService:
         Returns:
             Dictionary of catalog properties for PyIceberg.
         """
-        props = {
+        props: dict[str, str] = {
+            "type": "rest",
             "uri": self._settings.catalog.uri,
-            "warehouse": self._settings.catalog.warehouse,
         }
+
+        if self._settings.catalog.warehouse:
+            props["warehouse"] = self._settings.catalog.warehouse
 
         if self._settings.catalog.credential:
             props["credential"] = self._settings.catalog.credential
 
+        if self._settings.catalog.token:
+            props["token"] = self._settings.catalog.token
+
         s3_config = self._settings.catalog.s3
-        if s3_config.endpoint:
+        if s3_config and s3_config.endpoint:
             props["s3.endpoint"] = s3_config.endpoint
-        if s3_config.access_key_id:
+        if s3_config and s3_config.access_key_id:
             props["s3.access-key-id"] = s3_config.access_key_id
-        if s3_config.secret_access_key:
+        if s3_config and s3_config.secret_access_key:
             props["s3.secret-access-key"] = s3_config.secret_access_key
-        if s3_config.region:
+        if s3_config and s3_config.region:
             props["s3.region"] = s3_config.region
 
         return props
@@ -86,11 +92,13 @@ class CatalogService:
             Initialized PyIceberg catalog instance.
 
         Raises:
-            RuntimeError: If catalog type is not supported.
+            RuntimeError: If catalog type is not supported or URI is empty.
         """
         catalog_type = self._settings.catalog.type
 
         if catalog_type == CatalogType.REST:
+            if not self._settings.catalog.uri:
+                raise RuntimeError("REST catalog requires a non-empty 'uri' configuration")
             props = self._build_catalog_properties()
             catalog_name = self._settings.catalog.name
             return load_catalog(catalog_name, **props)
@@ -163,14 +171,18 @@ class CatalogService:
         if table.metadata.partition_specs:
             spec = table.metadata.spec()
             if spec:
-                partition_spec_info = [
-                    {
-                        "source_id": field.source_id,
-                        "name": field.name,
-                        "transform": str(field.transform),
-                    }
-                    for field in spec.fields
-                ]
+                partition_spec_info = {
+                    "spec_id": spec.spec_id,
+                    "fields": [
+                        {
+                            "source_id": field.source_id,
+                            "field_id": field.field_id,
+                            "name": field.name,
+                            "transform": str(field.transform),
+                        }
+                        for field in spec.fields
+                    ],
+                }
 
         snapshots = []
         for snap in table.metadata.snapshots:

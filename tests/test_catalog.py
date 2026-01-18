@@ -714,10 +714,13 @@ class TestTableDetailsEndpoint:
         mock_catalog_service.get_table_details.return_value = {
             "location": "s3://bucket/ns/table",
             "snapshot_id": 123,
-            "partition_spec": [
-                {"source_id": 1, "name": "dt", "transform": "day"},
-                {"source_id": 2, "name": "region", "transform": "identity"},
-            ],
+            "partition_spec": {
+                "spec_id": 0,
+                "fields": [
+                    {"source_id": 1, "field_id": 1000, "name": "dt", "transform": "day"},
+                    {"source_id": 2, "field_id": 1001, "name": "region", "transform": "identity"},
+                ],
+            },
             "snapshots": [],
         }
 

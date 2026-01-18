@@ -262,7 +262,7 @@ PyIceberg types need conversion to string format for API responses:
 ## Success Metrics
 
 - All existing API endpoints return identical response formats
-- Catalog operations complete within acceptable latency (< 500ms for listings)
+- Catalog operations complete within acceptable latency (less than 500 ms for listings)
 - All existing tests pass after migration
 - New PyIceberg-specific tests achieve >80% coverage of catalog service
 - No regressions in UI functionality

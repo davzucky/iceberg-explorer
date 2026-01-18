@@ -202,9 +202,11 @@ class TestCatalogServiceGetTableDetails:
         mock_table.metadata.snapshots = []
         mock_partition_field = MagicMock()
         mock_partition_field.source_id = 1
+        mock_partition_field.field_id = 1000
         mock_partition_field.name = "date"
         mock_partition_field.transform = "bucket"
         mock_partition_spec = MagicMock()
+        mock_partition_spec.spec_id = 0
         mock_partition_spec.fields = [mock_partition_field]
         mock_table.metadata.partition_specs = [mock_partition_spec]
         mock_table.metadata.spec.return_value = mock_partition_spec
@@ -215,9 +217,12 @@ class TestCatalogServiceGetTableDetails:
             result = service.get_table_details("db", "users")
             assert result["location"] == "s3://bucket/table"
             assert result["snapshot_id"] == 12345
-            assert result["partition_spec"] == [
-                {"source_id": 1, "name": "date", "transform": "bucket"}
-            ]
+            assert result["partition_spec"] == {
+                "spec_id": 0,
+                "fields": [
+                    {"source_id": 1, "field_id": 1000, "name": "date", "transform": "bucket"}
+                ],
+            }
             assert result["snapshots"] == []
             mock_catalog.load_table.assert_called_once_with(("db", "users"))
 
