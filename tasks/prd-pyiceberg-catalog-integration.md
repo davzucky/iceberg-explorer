@@ -218,7 +218,7 @@ Currently, the application uses DuckDB's `duckdb_schemas()`, `duckdb_tables()`, 
 ## Technical Considerations
 
 ### PyIceberg Integration
-- PyIceberg catalog is thread-safe and can be shared across requests
+- PyIceberg Catalog instances are **not guaranteed to be thread-safe**. When sharing a Catalog instance across threads (e.g., in async web frameworks), either protect shared Catalog/Table objects with synchronization primitives (e.g., `threading.Lock`) or create separate Catalog instances per thread/request.
 - Use `load_catalog()` with configuration dict for flexibility
 - REST catalog requires `uri` and optionally `warehouse`, `credential`, `token`
 

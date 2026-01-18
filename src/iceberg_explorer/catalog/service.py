@@ -156,7 +156,7 @@ class CatalogService:
             RuntimeError: If the catalog type is not supported.
             NoSuchTableError: If a table does not exist.
         """
-        table_identifier = tuple(namespace.split(".") + [table_name])
+        table_identifier = (*namespace.split("."), table_name)
         table = self.catalog.load_table(table_identifier)
 
         partition_spec_info = None
@@ -164,7 +164,11 @@ class CatalogService:
             spec = table.metadata.spec()
             if spec:
                 partition_spec_info = [
-                    {"source_id": field.source_id, "name": field.name, "transform": field.transform}
+                    {
+                        "source_id": field.source_id,
+                        "name": field.name,
+                        "transform": str(field.transform),
+                    }
                     for field in spec.fields
                 ]
 
@@ -199,7 +203,7 @@ class CatalogService:
             RuntimeError: If catalog type is not supported.
             NoSuchTableError: If a table does not exist.
         """
-        table_identifier = tuple(namespace.split(".") + [table_name])
+        table_identifier = (*namespace.split("."), table_name)
         table = self.catalog.load_table(table_identifier)
         schema = table.schema()
 

@@ -335,7 +335,15 @@ async def get_table_details(
         )
         snapshots.append(snapshot)
 
-    if snapshots:
+    # Use the catalog-provided current snapshot ID if available
+    current_snapshot_id = details.get("snapshot_id")
+    if current_snapshot_id is not None:
+        current_snapshot = next(
+            (s for s in snapshots if s.snapshot_id == current_snapshot_id),
+            None,
+        )
+    # Fallback to max sequence number if no current snapshot ID or no match found
+    if current_snapshot is None and snapshots:
         current_snapshot = max(snapshots, key=lambda s: s.sequence_number)
 
     partition_spec: PartitionSpec | None = None

@@ -25,10 +25,10 @@ Create a devcontainer configuration for Iceberg Explorer that enables local deve
 - [ ] Lint check passes (valid JSON/YAML)
 
 ### US-002: Configure Python development container
-**Description:** As a developer, I want the main development container to have Python 3.14 and uv package manager so I can run the Iceberg Explorer application.
+**Description:** As a developer, I want the main development container to have Python 3.12 and uv package manager so I can run the Iceberg Explorer application.
 
 **Acceptance Criteria:**
-- [ ] Dev container uses Python 3.14 base image
+- [ ] Dev container uses Python 3.12 base image (mcr.microsoft.com/devcontainers/python:3.12)
 - [ ] uv package manager is installed and available in PATH
 - [ ] Project dependencies can be installed via `uv sync --all-extras`
 - [ ] `uv run iceberg-explorer` starts the application successfully
