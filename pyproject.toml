@@ -19,6 +19,7 @@ dependencies = [
     "fastapi>=0.115.3",
     "duckdb>=1.4.2",
     "pyarrow>=17.0.0",
+    "pyiceberg[pyarrow]>=0.7.0",
     "granian>=1.6.0",
     "pydantic>=2.9.0",
     "pydantic-settings>=2.5.0",

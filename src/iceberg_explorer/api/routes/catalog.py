@@ -18,14 +18,15 @@ from iceberg_explorer.api.routes.utils import (
     _parse_namespace,
     _quote_identifier,
 )
+from iceberg_explorer.catalog.service import get_catalog_service
 from iceberg_explorer.models.catalog import (
     ColumnStatistics,
     ListNamespacesResponse,
     ListTablesResponse,
+    PartitionField,
     PartitionSpec,
     SchemaField,
     Snapshot,
-    SortOrder,
     TableDetails,
     TableIdentifier,
     TableSchemaResponse,
@@ -79,50 +80,27 @@ async def list_namespaces(
     Raises:
         HTTPException: 404 if parent namespace doesn't exist.
     """
-    engine = get_engine()
+    from pyiceberg.exceptions import NoSuchNamespaceError
 
-    if not engine.is_initialized:
-        engine.initialize()
+    catalog_service = get_catalog_service()
 
     parent_parts = _parse_namespace(parent)
-    catalog_name = engine.catalog_name
 
-    with engine.get_connection() as conn:
-        if parent_parts:
-            parent_path = _build_namespace_path(catalog_name, parent_parts)
-            try:
-                conn.execute(f"SELECT * FROM {parent_path}.information_schema.schemata LIMIT 1")
-            except Exception as e:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Namespace not found: {'.'.join(parent_parts)}",
-                ) from e
+    parent_ns_str = ".".join(parent_parts) if parent_parts else None
 
-        schema_path = (
-            _build_namespace_path(catalog_name, parent_parts)
-            if parent_parts
-            else _quote_identifier(catalog_name)
-        )
-        sql = f"SELECT schema_name FROM {schema_path}.information_schema.schemata"
+    try:
+        namespaces = catalog_service.list_namespaces(parent=parent_ns_str)
+    except NoSuchNamespaceError as e:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Namespace not found: {'.'.join(parent_parts) if parent_parts else 'root'}",
+        ) from e
 
-        try:
-            result = conn.execute(sql).fetchall()
-        except Exception as e:
-            if "does not exist" in str(e).lower() or "not found" in str(e).lower():
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Namespace not found: {'.'.join(parent_parts) if parent_parts else 'root'}",
-                ) from e
-            raise
+    namespace_lists: list[list[str]] = []
+    for ns in namespaces:
+        namespace_lists.append(ns.split("."))
 
-        namespaces: list[list[str]] = []
-        for row in result:
-            schema_name = row[0]
-            if schema_name not in ("main", "information_schema", "pg_catalog"):
-                full_namespace = parent_parts + [schema_name] if parent_parts else [schema_name]
-                namespaces.append(full_namespace)
-
-    return ListNamespacesResponse(namespaces=namespaces)
+    return ListNamespacesResponse(namespaces=namespace_lists)
 
 
 @router.get("/namespaces/{namespace}/tables", response_model=ListTablesResponse)
@@ -141,10 +119,9 @@ async def list_tables(
     Raises:
         HTTPException: 404 if namespace doesn't exist.
     """
-    engine = get_engine()
+    from pyiceberg.exceptions import NoSuchNamespaceError
 
-    if not engine.is_initialized:
-        engine.initialize()
+    catalog_service = get_catalog_service()
 
     namespace_parts = _parse_namespace(namespace)
     if not namespace_parts:
@@ -153,34 +130,21 @@ async def list_tables(
             detail="Namespace cannot be empty",
         )
 
-    catalog_name = engine.catalog_name
+    namespace_str = ".".join(namespace_parts)
 
-    with engine.get_connection() as conn:
-        namespace_path = _build_namespace_path(catalog_name, namespace_parts)
-        try:
-            conn.execute(f"SELECT * FROM {namespace_path}.information_schema.schemata LIMIT 1")
-        except Exception as e:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Namespace not found: {'.'.join(namespace_parts)}",
-            ) from e
+    try:
+        tables = catalog_service.list_tables(namespace_str)
+    except NoSuchNamespaceError as e:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Namespace not found: {'.'.join(namespace_parts)}",
+        ) from e
 
-        sql = f"SELECT table_name FROM {namespace_path}.information_schema.tables WHERE table_schema = ?"
-
-        try:
-            result = conn.execute(sql, [namespace_parts[-1]]).fetchall()
-        except Exception as e:
-            if "does not exist" in str(e).lower() or "not found" in str(e).lower():
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Namespace not found: {'.'.join(namespace_parts)}",
-                ) from e
-            raise
-
-        identifiers: list[TableIdentifier] = []
-        for row in result:
-            table_name = row[0]
-            identifiers.append(TableIdentifier(namespace=namespace_parts, name=table_name))
+    identifiers: list[TableIdentifier] = []
+    for table_identifier in tables:
+        table_parts = table_identifier.split(".")
+        table_name = table_parts[-1]
+        identifiers.append(TableIdentifier(namespace=namespace_parts, name=table_name))
 
     return ListTablesResponse(identifiers=identifiers)
 
@@ -341,93 +305,69 @@ async def get_table_details(
     Raises:
         HTTPException: 404 if table doesn't exist, 400 if path format is invalid.
     """
-    engine = get_engine()
+    from pyiceberg.exceptions import NoSuchTableError
 
-    if not engine.is_initialized:
-        engine.initialize()
+    catalog_service = get_catalog_service()
 
     try:
         namespace_parts, table_name = _parse_table_path(table_path)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
-    catalog_name = engine.catalog_name
+    namespace_str = ".".join(namespace_parts)
 
-    with engine.get_connection() as conn:
-        namespace_path = _build_namespace_path(catalog_name, namespace_parts)
-        quoted_table = _quote_identifier(table_name)
-        full_table_path = f"{namespace_path}.{quoted_table}"
+    try:
+        details = catalog_service.get_table_details(namespace_str, table_name)
+    except NoSuchTableError as e:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Table not found: {namespace_str}.{table_name}",
+        ) from e
 
-        try:
-            conn.execute(f"SELECT * FROM {full_table_path} LIMIT 0")
-        except Exception as e:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Table not found: {'.'.join(namespace_parts)}.{table_name}",
-            ) from e
+    snapshots: list[Snapshot] = []
+    current_snapshot: Snapshot | None = None
+    for snap_dict in details["snapshots"]:
+        snapshot = Snapshot(
+            sequence_number=snap_dict["sequence_number"],
+            snapshot_id=snap_dict["snapshot_id"],
+            timestamp_ms=snap_dict["timestamp_ms"],
+            manifest_list=snap_dict["manifest_list"],
+        )
+        snapshots.append(snapshot)
 
-        snapshots: list[Snapshot] = []
-        current_snapshot: Snapshot | None = None
-        try:
-            unquoted_path = f"{catalog_name}.{'.'.join(namespace_parts)}.{table_name}"
-            snapshot_result = conn.execute(
-                "SELECT sequence_number, snapshot_id, timestamp_ms, manifest_list FROM iceberg_snapshots(?)",
-                [unquoted_path],
-            ).fetchall()
+    # Use the catalog-provided current snapshot ID if available
+    current_snapshot_id = details.get("snapshot_id")
+    if current_snapshot_id is not None:
+        current_snapshot = next(
+            (s for s in snapshots if s.snapshot_id == current_snapshot_id),
+            None,
+        )
+    # Fallback to max sequence number if no current snapshot ID or no match found
+    if current_snapshot is None and snapshots:
+        current_snapshot = max(snapshots, key=lambda s: s.sequence_number)
 
-            for row in snapshot_result:
-                timestamp_ms = row[2]
-                if hasattr(timestamp_ms, "timestamp"):
-                    timestamp_ms = int(timestamp_ms.timestamp() * 1000)
-                elif isinstance(timestamp_ms, str):
-                    from datetime import datetime
-
-                    dt = datetime.fromisoformat(timestamp_ms.replace("Z", "+00:00"))
-                    timestamp_ms = int(dt.timestamp() * 1000)
-                else:
-                    timestamp_ms = int(timestamp_ms)
-
-                snapshot = Snapshot(
-                    sequence_number=int(row[0]),
-                    snapshot_id=int(row[1]),
-                    timestamp_ms=timestamp_ms,
-                    manifest_list=row[3] if row[3] else None,
-                )
-                snapshots.append(snapshot)
-
-            if snapshots:
-                current_snapshot = max(snapshots, key=lambda s: s.sequence_number)
-        except Exception as e:
-            logger.debug("Failed to fetch snapshots for table: %s", e)
-
-        partition_spec: PartitionSpec | None = None
-        sort_order: SortOrder | None = None
-        location: str | None = None
-
-        try:
-            metadata_result = conn.execute(
-                "SELECT * FROM iceberg_metadata(?) LIMIT 1",
-                [unquoted_path],
-            ).fetchone()
-            if metadata_result:
-                manifest_path = metadata_result[0]
-                if manifest_path:
-                    path_parts = manifest_path.split("/metadata/")
-                    if len(path_parts) > 1:
-                        location = path_parts[0]
-        except Exception as e:
-            logger.debug("Failed to fetch metadata for table location: %s", e)
-
-        if location is None:
-            location = f"s3://{catalog_name}/{'.'.join(namespace_parts)}/{table_name}"
+    partition_spec: PartitionSpec | None = None
+    partition_spec_info = details["partition_spec"]
+    if partition_spec_info:
+        spec_id = partition_spec_info.get("spec_id", 0)
+        fields = []
+        for field_dict in partition_spec_info.get("fields", []):
+            field = PartitionField(
+                source_id=field_dict["source_id"],
+                field_id=field_dict.get("field_id", 1000 + len(fields)),
+                name=field_dict["name"],
+                transform=field_dict["transform"],
+            )
+            fields.append(field)
+        partition_spec = PartitionSpec(spec_id=spec_id, fields=fields)
 
     return TableDetails(
         namespace=namespace_parts,
         name=table_name,
-        location=location,
+        location=details["location"],
         format="ICEBERG",
         partition_spec=partition_spec,
-        sort_order=sort_order,
+        sort_order=None,
         current_snapshot=current_snapshot,
         snapshots=snapshots,
     )

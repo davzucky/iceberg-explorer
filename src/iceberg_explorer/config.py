@@ -24,6 +24,20 @@ class CatalogType(str, Enum):
     LOCAL = "local"
 
 
+class S3Config(BaseSettings):
+    """Configuration for S3-compatible storage."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="ICEBERG_EXPLORER_CATALOG__S3__",
+        env_nested_delimiter="__",
+    )
+
+    endpoint: str | None = Field(default=None, description="S3 endpoint URL")
+    access_key_id: str | None = Field(default=None, description="S3 access key ID")
+    secret_access_key: str | None = Field(default=None, description="S3 secret access key")
+    region: str | None = Field(default=None, description="S3 region")
+
+
 class CatalogConfig(BaseSettings):
     """Configuration for Iceberg catalog connection."""
 
@@ -36,6 +50,9 @@ class CatalogConfig(BaseSettings):
     uri: str = Field(default="http://localhost:8181", description="Catalog URI (for REST catalog)")
     warehouse: str = Field(default="", description="Warehouse path (for local catalog)")
     name: str = Field(default="default", description="Catalog name for DuckDB attachment")
+    credential: str | None = Field(default=None, description="Authentication credential")
+    token: str | None = Field(default=None, description="Bearer token for REST catalog")
+    s3: S3Config = Field(default_factory=S3Config, description="S3 storage configuration")
 
 
 class QueryConfig(BaseSettings):

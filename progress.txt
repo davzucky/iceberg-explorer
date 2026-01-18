@@ -1,0 +1,165 @@
+## Codebase Patterns
+- To run ruff with all dev dependencies, use `uv run --all-extras ruff check src/ tests/`
+- PyIceberg's list_namespaces() accepts optional namespace parameter (tuple or string) to list child namespaces
+- API uses unit separator (\x1f) for multi-level namespaces in URLs, but PyIceberg uses dot-separated strings
+- Conversion needed: ".".join(parent_parts) for parent, ns.split(".") for returned namespaces
+- Follow existing patterns: use global singleton pattern for services (get_catalog_service() like get_engine())
+- When updating tests, keep existing fixtures if used by other test classes
+- Use NoSuchNamespaceError from pyiceberg.exceptions for proper error handling
+- Unit separator decoding: use _parse_namespace() helper which splits on \x1f
+
+## [2026-01-17] - US-001
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Added pyiceberg[pyarrow]>=0.7.0 to pyproject.toml dependencies
+- Updated uv.lock via uv sync
+- Verified pyiceberg import works (version 0.10.0)
+- Files changed: pyproject.toml, uv.lock
+- **Learnings for future iterations:**
+  - To run ruff with all dev dependencies, use `uv run --all-extras ruff check src/ tests/`
+  - PyIceberg successfully installed with pyarrow extras for Arrow integration
+---
+
+## [2026-01-17] - US-002
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Verified CatalogConfig already has all required fields: type, uri, warehouse, credential, s3
+- All environment variables properly configured: ICEBERG_EXPLORER_CATALOG__TYPE, URI, WAREHOUSE
+- S3Config nested for credential passthrough
+- Files changed: None (configuration already existed)
+- **Learnings for future iterations:**
+  - Always verify existing codebase before implementing - configuration may already exist
+  - CatalogConfig uses env_prefix="ICEBERG_EXPLORER_CATALOG__" pattern for nested env vars
+---
+
+## [2026-01-17] - US-003
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Created src/iceberg_explorer/catalog/__init__.py
+- Created src/iceberg_explorer/catalog/service.py with CatalogService class
+- Implemented lazy initialization via @property decorator
+- Added _build_catalog_properties() to construct catalog configuration from settings
+- Implemented close() method for proper lifecycle management
+- Supports REST catalog with PyIceberg load_catalog()
+- Files changed: src/iceberg_explorer/catalog/__init__.py, src/iceberg_explorer/catalog/service.py
+- **Learnings for future iterations:**
+  - PyIceberg's load_catalog() accepts properties as kwargs (e.g., uri, warehouse, credential)
+  - S3 configuration is passed via s3.* properties (s3.endpoint, s3.access-key-id, etc.)
+  - Lazy initialization pattern: use @property to initialize on first access
+  - Use TYPE_CHECKING to avoid circular imports while maintaining type hints
+---
+
+## [2026-01-17] - US-004
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Added list_namespaces() method to CatalogService
+- Calls PyIceberg catalog.list_namespaces() via catalog property
+- Returns list of namespace strings (joins multi-level with dot separator)
+- Handles empty catalog gracefully (returns empty list)
+- Added 5 unit tests in tests/test_catalog_service.py
+- Files changed: src/iceberg_explorer/catalog/service.py, tests/test_catalog_service.py
+- **Learnings for future iterations:**
+  - PyIceberg catalog.list_namespaces() returns list of tuples (e.g., ("db", "schema"))
+  - Use ".".join(ns) to convert namespace tuples to string identifiers
+  - Unit test pattern: use patch.object to mock internal attributes like _catalog
+---
+
+## [2026-01-17] - US-005
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Added list_tables(namespace) method to CatalogService
+- Calls PyIceberg catalog.list_tables(namespace_tuple) via catalog property
+- Converts namespace string to tuple (splits on ".")
+- Returns list of table identifiers as strings (joins with ".")
+- NoSuchNamespaceError propagates correctly for non-existent namespaces
+- Added 5 unit tests for list_tables
+- Files changed: src/iceberg_explorer/catalog/service.py, tests/test_catalog_service.py
+- **Learnings for future iterations:**
+  - PyIceberg catalog.list_tables() requires namespace as tuple
+  - Use tuple(namespace.split(".")) to convert namespace string to tuple
+  - NoSuchNamespaceError is raised by PyIceberg when namespace doesn't exist
+  - Can test error propagation using pytest.raises() with specific exception type
+---
+
+## [2026-01-17] - US-006
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Added get_table_details(namespace, table_name) method to CatalogService
+- Calls PyIceberg catalog.load_table() to get table metadata
+- Returns dict with location, snapshot_id, partition_spec, num_snapshots
+- Converts partition spec fields to dict format for API response
+- NoSuchTableError propagates correctly for non-existent tables
+- Added 4 unit tests for get_table_details
+- Files changed: src/iceberg_explorer/catalog/service.py, tests/test_catalog_service.py
+- **Learnings for future iterations:**
+  - PyIceberg Table object has metadata attribute with location, current_snapshot_id, partition_specs, snapshots
+  - Use table.metadata.spec() to get current partition spec
+  - PartitionSpec fields have source_id, name, and transform attributes
+  - Can test complex nested structures with MagicMock for metadata
+---
+
+## [2026-01-17] - US-007
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Added get_table_schema(namespace, table_name) method to CatalogService
+- Calls PyIceberg table.schema() to get table schema
+- Returns dict with schema_id and fields list (name, type, nullable)
+- Converts field_type to string representation
+- NoSuchTableError propagates correctly for non-existent tables
+- Added 4 unit tests for get_table_schema
+- Files changed: src/iceberg_explorer/catalog/service.py, tests/test_catalog_service.py
+- **Learnings for future iterations:**
+  - PyIceberg Table object has schema() method returning Schema object
+  - Schema object has fields, schema_id, and identifier attributes
+  - Use str(field.field_type) to convert field type to string
+  - field.optional attribute indicates nullability (True = nullable)
+---
+
+## [2026-01-17] - US-008
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Added get_catalog_service() and reset_catalog_service() functions to catalog/service.py (follows same pattern as get_engine())
+- Updated CatalogService.list_namespaces() to accept optional parent parameter for listing child namespaces
+- Updated GET /api/v1/catalog/namespaces endpoint to use CatalogService instead of DuckDB
+- Removed DuckDB-based namespace listing code from the endpoint
+- Response format remains backward compatible (returns list of list of strings)
+- Updated test_catalog.py: added mock_catalog_service fixture, updated TestListNamespacesEndpoint tests to mock CatalogService
+- All tests pass (8 namespace tests), linting passes
+- Files changed: src/iceberg_explorer/api/routes/catalog.py, src/iceberg_explorer/catalog/service.py, tests/test_catalog.py
+- **Learnings for future iterations:**
+  - PyIceberg's list_namespaces() accepts optional namespace parameter (tuple or string) to list child namespaces
+  - API uses unit separator (\x1f) for multi-level namespaces in URLs, but PyIceberg uses dot-separated strings
+  - Conversion needed: ".".join(parent_parts) for parent, ns.split(".") for returned namespaces
+  - Follow existing patterns: use global singleton pattern for services (get_catalog_service() like get_engine())
+  - When updating tests, keep existing fixtures if used by other test classes
+  - Use NoSuchNamespaceError from pyiceberg.exceptions for proper error handling
+   - Unit separator decoding: use _parse_namespace() helper which splits on \x1f
+
+## [2026-01-17] - US-009
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Updated GET /api/v1/catalog/namespaces/{namespace}/tables endpoint to use CatalogService
+- Removed DuckDB-based table listing code (engine initialization, information_schema queries)
+- Response format remains backward compatible (returns TableIdentifier objects)
+- Handles multi-level namespaces with unit separator decoding via _parse_namespace()
+- Updated TestListTablesEndpoint tests to use mock_catalog_service instead of mock_engine
+- All tests pass (6 table listing tests), linting passes
+- Files changed: src/iceberg_explorer/api/routes/catalog.py, tests/test_catalog.py
+- **Learnings for future iterations:**
+  - PyIceberg catalog.list_tables() returns fully qualified table identifiers (e.g., "db.schema.table")
+  - Need to parse table name from last segment of identifier: table_parts[-1]
+  - When refactoring from DuckDB to PyIceberg, remove engine.get_connection() and all SQL queries
+  - Import NoSuchNamespaceError from pyiceberg.exceptions at function level (or top-level) for error handling
+  - TableIdentifier model expects namespace parts as list and table name as string - maintain this format
+---
+
+## [2026-01-17] - US-010
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Updated CatalogService.get_table_details() to return full snapshot list instead of just count
+- Updated GET /api/v1/catalog/tables/{namespace}.{table} endpoint to use CatalogService
+- Removed all DuckDB table details code (engine initialization, connection management, SQL queries)
+- Response format remains backward compatible (location, snapshot_id, partition_spec, snapshots)
+- Added PartitionField import for partition spec conversion
+- Updated 8 tests to use mock_catalog_service instead of mock_engine
+- Added new test for partition spec functionality
+- Files changed: src/iceberg_explorer/api/routes/catalog.py, src/iceberg_explorer/catalog/service.py, tests/test_catalog.py, tests/test_catalog_service.py, prd.json
+- **Learnings for future iterations:**
+  - PyIceberg table.metadata.snapshots is a list of Snapshot objects with sequence_number, snapshot_id, timestamp_ms, manifest_list attributes
+  - PyIceberg table.metadata.current_snapshot_id is the ID of the current snapshot
+  - Convert snapshot objects to dicts: {"sequence_number": snap.sequence_number, "snapshot_id": snap.snapshot_id, "timestamp_ms": int(snap.timestamp_ms), "manifest_list": snap.manifest_list}
+  - When updating API endpoints from DuckDB to PyIceberg, replace all engine-related code (get_engine(), engine.initialize(), conn.execute(), SQL queries)
+  - PartitionField field_id needs to be assigned sequentially (1000, 1001, ...) to match model requirements
+  - SortOrder is not yet supported by PyIceberg integration, set to None in response
+  - When refactoring endpoints, check for unused imports and remove them (SortOrder was unused after refactoring)
+---
