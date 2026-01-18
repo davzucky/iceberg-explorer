@@ -143,3 +143,23 @@ Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
   - Import NoSuchNamespaceError from pyiceberg.exceptions at function level (or top-level) for error handling
   - TableIdentifier model expects namespace parts as list and table name as string - maintain this format
 ---
+
+## [2026-01-17] - US-010
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Updated CatalogService.get_table_details() to return full snapshot list instead of just count
+- Updated GET /api/v1/catalog/tables/{namespace}.{table} endpoint to use CatalogService
+- Removed all DuckDB table details code (engine initialization, connection management, SQL queries)
+- Response format remains backward compatible (location, snapshot_id, partition_spec, snapshots)
+- Added PartitionField import for partition spec conversion
+- Updated 8 tests to use mock_catalog_service instead of mock_engine
+- Added new test for partition spec functionality
+- Files changed: src/iceberg_explorer/api/routes/catalog.py, src/iceberg_explorer/catalog/service.py, tests/test_catalog.py, tests/test_catalog_service.py, prd.json
+- **Learnings for future iterations:**
+  - PyIceberg table.metadata.snapshots is a list of Snapshot objects with sequence_number, snapshot_id, timestamp_ms, manifest_list attributes
+  - PyIceberg table.metadata.current_snapshot_id is the ID of the current snapshot
+  - Convert snapshot objects to dicts: {"sequence_number": snap.sequence_number, "snapshot_id": snap.snapshot_id, "timestamp_ms": int(snap.timestamp_ms), "manifest_list": snap.manifest_list}
+  - When updating API endpoints from DuckDB to PyIceberg, replace all engine-related code (get_engine(), engine.initialize(), conn.execute(), SQL queries)
+  - PartitionField field_id needs to be assigned sequentially (1000, 1001, ...) to match model requirements
+  - SortOrder is not yet supported by PyIceberg integration, set to None in response
+  - When refactoring endpoints, check for unused imports and remove them (SortOrder was unused after refactoring)
+---
