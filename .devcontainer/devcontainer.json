@@ -2,18 +2,50 @@
   "name": "Iceberg Explorer Dev",
   "dockerComposeFile": "docker-compose.yml",
   "service": "app",
+  "containerUser": "vscode",
   "workspaceFolder": "/workspace/iceberg-explorer",
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace/iceberg-explorer,type=bind",
+  "initializeCommand": {
+    "extractGitGlobals": "git config -l --global --include > .gitconfig.global",
+    "extractGitLocals": "git config -l --local --include > .gitconfig.local",
+    "copyOpenCodeToken": ".devcontainer/scripts/opencode-auth-copy",
+    "copyGHConfig": ".devcontainer/scripts/gh-auth-export"
+  },
   "features": {
-    "ghcr.io/devcontainers/features/common-utils:2": {
+    "ghcr.io/davzucky/devcontainers-features-wolfi/common-utils:1.0.3": {
       "installZsh": true,
       "installOhMyZsh": true,
-      "upgradePackages": true
+      "upgradePackages": true,
+      "username": "vscode",
+      "userUid": "1000",
+      "userGid": "1000"
     },
-    "ghcr.io/devcontainers/features/git:1": {
-      "version": "latest"
+    "ghcr.io/davzucky/devcontainers-features-wolfi/opencode:1.4.3": {
+      "copyAuth": true
     },
-    "ghcr.io/devcontainers-extra/features/opencode:1": {}
+    "ghcr.io/davzucky/devcontainers-features-wolfi/chromium:1": {},
+    "ghcr.io/davzucky/devcontainers-features-wolfi/gh:1.1.0": {
+      "importAuth": true,
+      "useGitAuth": true
+    },
+    "ghcr.io/davzucky/devcontainers-features-wolfi/python:1.1.0": {
+      "pythonVersion": "3.13",
+      "installRuff": true,
+      "installUV": true
+    },
+    "ghcr.io/davzucky/devcontainers-features-wolfi/node:1": {
+      "nodeVersion": "20",
+      "installNpm": true,
+      "installYarn": false,
+      "installPnpm": false
+    },
+    "ghcr.io/davzucky/devcontainers-features-wolfi/git-user-profile:1": {
+      "copyKeys": "default",
+      "includeLocal": true,
+      "globalFile": ".gitconfig.global",
+      "localFile": ".gitconfig.local",
+      "installGit": true
+    }
   },
   "customizations": {
     "vscode": {
@@ -23,7 +55,7 @@
         "charliermarsh.ruff"
       ],
       "settings": {
-        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.defaultInterpreterPath": "/usr/bin/python3",
         "python.linting.enabled": true,
         "python.linting.ruffEnabled": true,
         "python.formatting.provider": "ruff",
