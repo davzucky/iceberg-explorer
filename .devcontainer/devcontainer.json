@@ -63,7 +63,7 @@
       }
     }
   },
-  "postCreateCommand": "python /workspace/iceberg-explorer/scripts/bootstrap_lakekeeper.py && uv sync --all-extras && uv run python /workspace/iceberg-explorer/scripts/seed_data.py",
+  "postCreateCommand": "python /workspace/iceberg-explorer/scripts/bootstrap_lakekeeper.py && uv sync --all-extras && .devcontainer/scripts/install-prek && uv run python /workspace/iceberg-explorer/scripts/seed_data.py",
   "containerEnv": {
     "ICEBERG_EXPLORER_CATALOG__TYPE": "rest",
     "ICEBERG_EXPLORER_CONFIG": "/home/vscode/.config/iceberg-explorer/lakekeeper-config.json",
