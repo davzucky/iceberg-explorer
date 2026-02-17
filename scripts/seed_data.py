@@ -1,6 +1,7 @@
 """Seed script to populate Iceberg catalog with sample data."""
 
 import json
+import os
 import time
 from datetime import datetime
 
@@ -31,12 +32,29 @@ def seed_database() -> None:
         print(f"Attached to catalog: {catalog_uri}")
         time.sleep(2)
 
-        result = conn.execute(
-            "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'nyc' AND table_name = 'taxi_trips';"
-        ).fetchone()
-        if result and result[0] > 0:
-            print("Database already seeded. Skipping...")
-            return
+        force_reseed = os.getenv("ICEBERG_EXPLORER_FORCE_RESEED", "false").lower() in {
+            "1",
+            "true",
+            "yes",
+        }
+
+        if not force_reseed:
+            try:
+                conn.execute("SELECT COUNT(*) FROM iceberg.nyc.taxi_trips").fetchone()
+                conn.execute("SELECT COUNT(*) FROM iceberg.nyc.zones").fetchone()
+                conn.execute("SELECT COUNT(*) FROM iceberg.sales.orders").fetchone()
+                conn.execute("SELECT COUNT(*) FROM iceberg.sales.products").fetchone()
+                print("Database already seeded and readable. Skipping...")
+                return
+            except Exception as e:
+                print(f"Existing seed data appears stale or unreadable ({e}). Re-seeding...")
+        else:
+            print("Force reseed enabled. Re-seeding tables...")
+
+        conn.execute("DROP TABLE IF EXISTS iceberg.nyc.taxi_trips")
+        conn.execute("DROP TABLE IF EXISTS iceberg.nyc.zones")
+        conn.execute("DROP TABLE IF EXISTS iceberg.sales.orders")
+        conn.execute("DROP TABLE IF EXISTS iceberg.sales.products")
 
         print("Creating namespace: nyc")
         conn.execute("CREATE SCHEMA IF NOT EXISTS iceberg.nyc;")

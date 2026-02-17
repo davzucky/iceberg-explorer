@@ -11,6 +11,7 @@ from fastapi import APIRouter, Response
 from pydantic import BaseModel, Field
 
 from iceberg_explorer import __version__
+from iceberg_explorer.catalog.service import get_catalog_service
 from iceberg_explorer.query.engine import get_engine
 
 router = APIRouter(tags=["health"])
@@ -54,28 +55,34 @@ async def health_check(response: Response) -> HealthResponse:
     """
     components: dict[str, ComponentHealth] = {}
 
+    duckdb_healthy = False
+    catalog_healthy = False
+
     try:
         engine = get_engine()
         if not engine.is_initialized:
             engine.initialize()
 
         engine_health = engine.health_check()
-
+        duckdb_healthy = bool(engine_health.get("duckdb", False))
         components["duckdb"] = ComponentHealth(
-            healthy=engine_health.get("duckdb", False),
-            error=None if engine_health.get("duckdb") else engine_health.get("error"),
+            healthy=duckdb_healthy,
+            error=None
+            if duckdb_healthy
+            else str(engine_health.get("error", "Unknown DuckDB error")),
         )
-        components["catalog"] = ComponentHealth(
-            healthy=engine_health.get("catalog", False),
-            error=None if engine_health.get("catalog") else engine_health.get("error"),
-        )
-
-        overall_healthy = engine_health.get("healthy", False)
-
     except Exception as e:
         components["duckdb"] = ComponentHealth(healthy=False, error=str(e))
+
+    try:
+        catalog_service = get_catalog_service()
+        catalog_service.list_namespaces()
+        catalog_healthy = True
+        components["catalog"] = ComponentHealth(healthy=True)
+    except Exception as e:
         components["catalog"] = ComponentHealth(healthy=False, error=str(e))
-        overall_healthy = False
+
+    overall_healthy = duckdb_healthy and catalog_healthy
 
     if overall_healthy:
         status = "healthy"
@@ -114,10 +121,19 @@ async def readiness_check(response: Response) -> ReadyResponse:
 
         if not engine_health.get("healthy", False):
             response.status_code = 503
+            reason = engine_health.get("error")
+            reason_text = reason if isinstance(reason, str) and reason else "Health check failed"
             return ReadyResponse(
                 ready=False,
-                reason=engine_health.get("error", "Health check failed"),
+                reason=reason_text,
             )
+
+        catalog_service = get_catalog_service()
+        try:
+            catalog_service.list_namespaces()
+        except Exception as e:
+            response.status_code = 503
+            return ReadyResponse(ready=False, reason=f"Catalog health check failed: {e}")
 
         return ReadyResponse(ready=True)
 

@@ -50,6 +50,7 @@ def rest_settings() -> Settings:
         catalog=CatalogConfig(
             type=CatalogType.REST,
             uri="http://localhost:8181",
+            warehouse="demo",
             name="rest_catalog",
         ),
         duckdb=DuckDBConfig(
@@ -147,8 +148,9 @@ class TestDuckDBEngineCatalogAttachment:
             assert any("INSTALL iceberg" in c for c in calls)
             assert any("LOAD iceberg" in c for c in calls)
             assert any("ENDPOINT" in c for c in calls)
-            assert any("AUTHORIZATION_TYPE 'none'" in c for c in calls)
+            assert any("AUTHORIZATION_TYPE" in c and "none" in c for c in calls)
             assert any("http://localhost:8181" in c for c in calls)
+            assert any("ATTACH" in c and "demo" in c for c in calls)
 
 
 class TestDuckDBEngineHealthCheck:

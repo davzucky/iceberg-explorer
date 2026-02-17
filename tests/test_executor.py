@@ -337,6 +337,20 @@ class TestQueryExecutor:
         status = executor.get_status(result.query_id)
         assert status is None
 
+    def test_rewrite_sql_with_catalog_hint(self, mock_engine: DuckDBEngine):
+        """Rewrite schema.table when DuckDB suggests a catalog prefix."""
+        executor = QueryExecutor(engine=mock_engine)
+
+        sql = "SELECT * FROM sales.orders LIMIT 10"
+        error = (
+            "Catalog Error: Table with name orders does not exist! "
+            'Did you mean "default.sales.orders"?'
+        )
+
+        rewritten = executor._rewrite_sql_with_catalog_hint(sql, error)
+
+        assert rewritten == 'SELECT * FROM "default".sales.orders LIMIT 10'
+
 
 class TestQueryCancellation:
     """Tests for query cancellation."""

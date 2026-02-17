@@ -223,6 +223,7 @@ class CatalogService:
         for field in schema.fields:
             fields.append(
                 {
+                    "field_id": field.field_id,
                     "name": field.name,
                     "type": str(field.field_type),
                     "nullable": field.optional,

@@ -5,8 +5,6 @@
 {% block nav_query %}bg-iceberg-800 text-white{% endblock %}
 
 {% block head %}
-<!-- Monaco Editor loader -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
 <style>
     #editor-container {
         height: 200px;
@@ -43,6 +41,7 @@
 <div
     hx-get="/ui/partials/namespace-tree"
     hx-trigger="load"
+    hx-request='{"timeout":7000}'
     hx-swap="innerHTML"
 >
     <div class="flex items-center justify-center py-8">
@@ -354,6 +353,7 @@
 function queryEditor() {
     return {
         editor: null,
+        fallbackEditor: null,
         sql: '',
         timeout: 300,
         isExecuting: false,
@@ -393,34 +393,40 @@ function queryEditor() {
         },
 
         initEditor() {
-            require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' }});
-            require(['vs/editor/editor.main'], () => {
-                this.editor = monaco.editor.create(document.getElementById('editor-container'), {
-                    value: '-- Enter your SQL query here\nSELECT * FROM ',
-                    language: 'sql',
-                    theme: 'vs',
-                    minimap: { enabled: false },
-                    automaticLayout: true,
-                    fontSize: 14,
-                    lineNumbers: 'on',
-                    scrollBeyondLastLine: false,
-                    wordWrap: 'on',
-                    tabSize: 2,
+            const defaultSql = '-- Enter your SQL query here\nSELECT * FROM ';
+            const container = document.getElementById('editor-container');
+
+            const useFallbackEditor = () => {
+                if (this.editor || this.fallbackEditor || !container) {
+                    return;
+                }
+
+                const textarea = document.createElement('textarea');
+                textarea.value = defaultSql;
+                textarea.className = 'h-full w-full rounded-md border-0 p-3 font-mono text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-iceberg-500';
+                textarea.setAttribute('aria-label', 'SQL editor');
+                textarea.addEventListener('input', () => {
+                    this.sql = textarea.value;
                 });
-
-                this.editor.onDidChangeModelContent(() => {
-                    this.sql = this.editor.getValue();
-                });
-
-                this.sql = this.editor.getValue();
-
-                // Ctrl/Cmd + Enter to run query
-                this.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
-                    if (!this.isExecuting && this.sql.trim()) {
-                        this.executeQuery();
+                textarea.addEventListener('keydown', (event) => {
+                    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                        event.preventDefault();
+                        if (!this.isExecuting && this.sql.trim()) {
+                            this.executeQuery();
+                        }
                     }
                 });
-            });
+
+                container.innerHTML = '';
+                container.appendChild(textarea);
+                this.fallbackEditor = textarea;
+                this.sql = textarea.value;
+            };
+
+            useFallbackEditor();
+            // Keep the editor fully local and responsive: do not auto-upgrade to Monaco
+            // to avoid additional CDN module fetches (e.g., sql.js) that can stall on
+            // restricted/slow networks.
         },
 
         resetResults() {
@@ -536,6 +542,17 @@ function queryEditor() {
 
             try {
                 const response = await fetch(`/api/v1/query/${this.queryId}/results?page_size=1000`);
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    this.error = errorData.detail || 'Failed to fetch results';
+                    return;
+                }
+
+                if (!response.body) {
+                    this.error = 'Failed to stream results';
+                    return;
+                }
+
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
 
@@ -571,6 +588,17 @@ function queryEditor() {
                         } catch (e) {
                             console.warn('Failed to parse result line:', line);
                         }
+                    }
+                }
+
+                if (buffer.trim()) {
+                    try {
+                        const msg = JSON.parse(buffer);
+                        if (msg.type === 'error') {
+                            this.error = msg.error;
+                        }
+                    } catch (e) {
+                        console.warn('Failed to parse trailing result chunk:', buffer);
                     }
                 }
 

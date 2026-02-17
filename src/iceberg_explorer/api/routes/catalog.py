@@ -8,7 +8,6 @@ Provides endpoints for:
 
 from __future__ import annotations
 
-import logging
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
@@ -33,7 +32,8 @@ from iceberg_explorer.models.catalog import (
 )
 from iceberg_explorer.query.engine import get_engine
 
-logger = logging.getLogger(__name__)
+# Backward compatibility for tests and imports that access these helpers here.
+_COMPAT_EXPORTS = (_build_namespace_path, _quote_identifier, get_engine)
 
 router = APIRouter(prefix="/api/v1/catalog", tags=["catalog"])
 
@@ -198,92 +198,59 @@ async def get_table_schema(
     Raises:
         HTTPException: 404 if table doesn't exist, 400 if path format is invalid.
     """
-    engine = get_engine()
+    from pyiceberg.exceptions import NoSuchTableError
 
-    if not engine.is_initialized:
-        engine.initialize()
+    catalog_service = get_catalog_service()
 
     try:
         namespace_parts, table_name = _parse_table_path(table_path)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
-    catalog_name = engine.catalog_name
+    namespace_str = ".".join(namespace_parts)
+    try:
+        schema_info = catalog_service.get_table_schema(namespace_str, table_name)
+        details = catalog_service.get_table_details(namespace_str, table_name)
+    except NoSuchTableError as e:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Table not found: {namespace_str}.{table_name}",
+        ) from e
 
-    with engine.get_connection() as conn:
-        namespace_path = _build_namespace_path(catalog_name, namespace_parts)
-        quoted_table = _quote_identifier(table_name)
-        full_table_path = f"{namespace_path}.{quoted_table}"
+    partition_source_ids: set[int] = set()
+    partition_names: set[str] = set()
+    partition_spec_info = details.get("partition_spec")
+    if partition_spec_info:
+        for partition_field in partition_spec_info.get("fields", []):
+            source_id = partition_field.get("source_id")
+            if isinstance(source_id, int):
+                partition_source_ids.add(source_id)
+            field_name = partition_field.get("name")
+            if isinstance(field_name, str):
+                partition_names.add(field_name)
 
-        try:
-            conn.execute(f"SELECT * FROM {full_table_path} LIMIT 0")
-        except Exception as e:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Table not found: {'.'.join(namespace_parts)}.{table_name}",
-            ) from e
-
-        columns_sql = f"""
-            SELECT
-                column_name,
-                data_type,
-                ordinal_position,
-                is_nullable
-            FROM {namespace_path}.information_schema.columns
-            WHERE table_name = ?
-            ORDER BY ordinal_position
-        """
-        column_result = conn.execute(columns_sql, [table_name]).fetchall()
-
-        partition_columns: set[str] = set()
-        unquoted_path = f"{catalog_name}.{'.'.join(namespace_parts)}.{table_name}"
-        try:
-            metadata_sql = "SELECT * FROM iceberg_metadata(?) LIMIT 100"
-            cur = conn.execute(metadata_sql, [unquoted_path])
-            metadata_result = cur.fetchall()
-            if metadata_result:
-                description = cur.description
-                if description:
-                    col_names = [col[0].lower() for col in description]
-                    if "partition_value" in col_names or "partition" in col_names:
-                        part_idx = (
-                            col_names.index("partition_value")
-                            if "partition_value" in col_names
-                            else col_names.index("partition")
-                        )
-                        for row in metadata_result:
-                            if row[part_idx]:
-                                for part in str(row[part_idx]).split(","):
-                                    if "=" in part:
-                                        partition_columns.add(part.split("=")[0].strip())
-        except Exception as e:
-            logger.debug("Failed to extract partition columns from metadata: %s", e)
-
-        column_stats: dict[str, ColumnStatistics] = {}
-
-        fields: list[SchemaField] = []
-        for i, row in enumerate(column_result):
-            col_name = row[0]
-            col_type = row[1]
-            ordinal = row[2] if len(row) > 2 else i + 1
-            is_nullable = row[3].upper() == "YES" if len(row) > 3 and row[3] else True
-
-            stats = column_stats.get(col_name)
-
-            field = SchemaField(
-                field_id=ordinal,
-                name=col_name,
-                type=col_type,
-                nullable=is_nullable,
-                is_partition_column=col_name in partition_columns,
+    column_stats: dict[str, ColumnStatistics] = {}
+    fields: list[SchemaField] = []
+    for field_info in schema_info["fields"]:
+        field_id = int(field_info.get("field_id", 0))
+        field_name = str(field_info["name"])
+        stats = column_stats.get(field_name)
+        fields.append(
+            SchemaField(
+                field_id=field_id,
+                name=field_name,
+                type=str(field_info["type"]),
+                nullable=bool(field_info.get("nullable", True)),
+                is_partition_column=(field_id in partition_source_ids)
+                or (field_name in partition_names),
                 statistics=stats,
             )
-            fields.append(field)
+        )
 
     return TableSchemaResponse(
         namespace=namespace_parts,
         name=table_name,
-        schema_id=0,
+        schema_id=int(schema_info.get("schema_id", 0)),
         fields=fields,
     )
 
