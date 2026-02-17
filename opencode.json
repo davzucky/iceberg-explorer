@@ -1,0 +1,28 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "chrome-devtools": {
+      "type": "local",
+      "enabled": true,
+      "command": [
+        "pnpm",
+        "dlx",
+        "chrome-devtools-mcp@latest",
+        "--headless=true",
+        "--executablePath=/usr/bin/chromium",
+        "--chrome-arg=--no-sandbox",
+        "--chrome-arg=--disable-dev-shm-usage",
+        "--chrome-arg=--disable-gpu",
+        "--chrome-arg=--single-process",
+        "--no-usage-statistics",
+        "--log-file=/tmp/chrome-devtools-mcp.log"
+      ],
+      "environment": {
+        "DEBUG": "*"
+      }
+    }
+  },
+  "tools": {
+    "chrome-devtools": true
+  }
+}

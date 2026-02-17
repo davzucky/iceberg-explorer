@@ -1,9 +1,5 @@
-FROM mcr.microsoft.com/devcontainers/python:3.14
-
-RUN pip install --no-cache-dir uv && uv --version
-
-ENV PATH="/usr/local/bin:${PATH}"
+FROM chainguard/wolfi-base@sha256:b5f4a33fa2fee95dd79535e069bafd60f52085c5786677da5724414374c5194c
 
 WORKDIR /workspace
 
-CMD ["/bin/bash"]
+CMD ["/bin/sh"]
