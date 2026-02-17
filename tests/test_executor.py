@@ -351,6 +351,21 @@ class TestQueryExecutor:
 
         assert rewritten == 'SELECT * FROM "default".sales.orders LIMIT 10'
 
+    def test_rewrite_sql_with_catalog_hint_multiple_occurrences(self, mock_engine: DuckDBEngine):
+        """Rewrite all occurrences of the same schema.table reference."""
+        executor = QueryExecutor(engine=mock_engine)
+
+        sql = "SELECT a.order_id, b.order_id FROM sales.orders a JOIN sales.orders b ON a.order_id = b.order_id"
+        error = (
+            "Catalog Error: Table with name orders does not exist! "
+            'Did you mean "default.sales.orders"?'
+        )
+
+        rewritten = executor._rewrite_sql_with_catalog_hint(sql, error)
+
+        assert rewritten is not None
+        assert rewritten.count('"default".sales.orders') == 2
+
 
 class TestQueryCancellation:
     """Tests for query cancellation."""

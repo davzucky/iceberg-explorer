@@ -142,7 +142,7 @@ class TestQueryPage:
         content = response.text
 
         assert "event.ctrlKey" in content or "event.metaKey" in content
-        assert "event.key === 'Enter'" in content or "Enter" in content
+        assert "event.key === 'Enter'" in content
 
 
 class TestNamespaceTreePartial:

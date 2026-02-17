@@ -43,6 +43,7 @@
     hx-trigger="load"
     hx-request='{"timeout":7000}'
     hx-swap="innerHTML"
+    hx-on::timeout="this.innerHTML = `<div class='rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700'><p class='font-medium'>Failed to load namespaces (timeout).</p><button class='mt-2 rounded bg-red-600 px-2 py-1 text-xs text-white hover:bg-red-700' onclick=\"htmx.ajax('GET','/ui/partials/namespace-tree',{target:this.closest('[hx-get]'),swap:'innerHTML'})\">Retry</button></div>`"
 >
     <div class="flex items-center justify-center py-8">
         <svg class="animate-spin h-6 w-6 text-iceberg-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -561,6 +562,21 @@ function queryEditor() {
                 let complete = null;
                 const allRows = [];
 
+                const applyMessage = (msg) => {
+                    if (msg.type === 'metadata') {
+                        metadata = msg;
+                        this.columns = msg.columns;
+                        this.columnFilters = new Array(msg.columns.length).fill('');
+                    } else if (msg.type === 'data') {
+                        allRows.push(...msg.rows);
+                        this.streamedRows = allRows.length;
+                    } else if (msg.type === 'complete') {
+                        complete = msg;
+                    } else if (msg.type === 'error') {
+                        this.error = msg.error;
+                    }
+                };
+
                 while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
@@ -573,18 +589,7 @@ function queryEditor() {
                         if (!line.trim()) continue;
                         try {
                             const msg = JSON.parse(line);
-                            if (msg.type === 'metadata') {
-                                metadata = msg;
-                                this.columns = msg.columns;
-                                this.columnFilters = new Array(msg.columns.length).fill('');
-                            } else if (msg.type === 'data') {
-                                allRows.push(...msg.rows);
-                                this.streamedRows = allRows.length;
-                            } else if (msg.type === 'complete') {
-                                complete = msg;
-                            } else if (msg.type === 'error') {
-                                this.error = msg.error;
-                            }
+                            applyMessage(msg);
                         } catch (e) {
                             console.warn('Failed to parse result line:', line);
                         }
@@ -594,9 +599,7 @@ function queryEditor() {
                 if (buffer.trim()) {
                     try {
                         const msg = JSON.parse(buffer);
-                        if (msg.type === 'error') {
-                            this.error = msg.error;
-                        }
+                        applyMessage(msg);
                     } catch (e) {
                         console.warn('Failed to parse trailing result chunk:', buffer);
                     }

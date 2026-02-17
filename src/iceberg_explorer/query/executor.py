@@ -390,7 +390,6 @@ class QueryExecutor:
             rf"(?<![\w.\"])({re.escape(unqualified)})(?![\w\"])",
             qualified,
             sql,
-            count=1,
         )
 
     def cancel(self, query_id: UUID) -> bool:

@@ -90,6 +90,8 @@ class TestHealthEndpoint:
     def test_health_all_healthy(self, client: TestClient):
         """Test health endpoint when everything is healthy."""
         mock_engine = MagicMock()
+        mock_catalog_service = MagicMock()
+        mock_catalog_service.list_namespaces.return_value = []
         mock_engine.is_initialized = True
         mock_engine.health_check.return_value = {
             "healthy": True,
@@ -97,7 +99,13 @@ class TestHealthEndpoint:
             "catalog": True,
         }
 
-        with patch("iceberg_explorer.api.routes.health.get_engine", return_value=mock_engine):
+        with (
+            patch("iceberg_explorer.api.routes.health.get_engine", return_value=mock_engine),
+            patch(
+                "iceberg_explorer.api.routes.health.get_catalog_service",
+                return_value=mock_catalog_service,
+            ),
+        ):
             response = client.get("/health")
 
         assert response.status_code == 200
@@ -165,6 +173,8 @@ class TestHealthEndpoint:
     def test_health_engine_not_initialized(self, client: TestClient):
         """Test health endpoint when engine needs initialization."""
         mock_engine = MagicMock()
+        mock_catalog_service = MagicMock()
+        mock_catalog_service.list_namespaces.return_value = []
         mock_engine.is_initialized = False
         mock_engine.health_check.return_value = {
             "healthy": True,
@@ -172,7 +182,13 @@ class TestHealthEndpoint:
             "catalog": True,
         }
 
-        with patch("iceberg_explorer.api.routes.health.get_engine", return_value=mock_engine):
+        with (
+            patch("iceberg_explorer.api.routes.health.get_engine", return_value=mock_engine),
+            patch(
+                "iceberg_explorer.api.routes.health.get_catalog_service",
+                return_value=mock_catalog_service,
+            ),
+        ):
             response = client.get("/health")
 
         assert response.status_code == 200
@@ -203,6 +219,8 @@ class TestHealthEndpoint:
     def test_health_includes_version(self, client: TestClient):
         """Test health endpoint includes version."""
         mock_engine = MagicMock()
+        mock_catalog_service = MagicMock()
+        mock_catalog_service.list_namespaces.return_value = []
         mock_engine.is_initialized = True
         mock_engine.health_check.return_value = {
             "healthy": True,
@@ -210,7 +228,13 @@ class TestHealthEndpoint:
             "catalog": True,
         }
 
-        with patch("iceberg_explorer.api.routes.health.get_engine", return_value=mock_engine):
+        with (
+            patch("iceberg_explorer.api.routes.health.get_engine", return_value=mock_engine),
+            patch(
+                "iceberg_explorer.api.routes.health.get_catalog_service",
+                return_value=mock_catalog_service,
+            ),
+        ):
             response = client.get("/health")
 
         assert response.status_code == 200
@@ -249,6 +273,8 @@ class TestReadyEndpoint:
     def test_ready_when_healthy(self, client: TestClient):
         """Test ready endpoint when everything is healthy."""
         mock_engine = MagicMock()
+        mock_catalog_service = MagicMock()
+        mock_catalog_service.list_namespaces.return_value = []
         mock_engine.is_initialized = True
         mock_engine.health_check.return_value = {
             "healthy": True,
@@ -256,7 +282,13 @@ class TestReadyEndpoint:
             "catalog": True,
         }
 
-        with patch("iceberg_explorer.api.routes.health.get_engine", return_value=mock_engine):
+        with (
+            patch("iceberg_explorer.api.routes.health.get_engine", return_value=mock_engine),
+            patch(
+                "iceberg_explorer.api.routes.health.get_catalog_service",
+                return_value=mock_catalog_service,
+            ),
+        ):
             response = client.get("/ready")
 
         assert response.status_code == 200
