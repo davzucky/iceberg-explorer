@@ -88,10 +88,14 @@ class DuckDBEngine:
 
         quoted_catalog_name = '"' + catalog_name.replace('"', '""') + '"'
         if catalog_config.type == CatalogType.REST:
+            endpoint_uri = catalog_config.uri
+            warehouse_name = catalog_config.warehouse or "iceberg"
+
             # Quote the URI to prevent SQL injection (escape single quotes)
-            quoted_uri = "'" + catalog_config.uri.replace("'", "''") + "'"
+            quoted_uri = "'" + endpoint_uri.replace("'", "''") + "'"
+            quoted_warehouse_name = "'" + warehouse_name.replace("'", "''") + "'"
             attach_sql = f"""
-                ATTACH 'iceberg' AS {quoted_catalog_name} (
+                ATTACH {quoted_warehouse_name} AS {quoted_catalog_name} (
                     TYPE ICEBERG,
                     ENDPOINT {quoted_uri},
                     AUTHORIZATION_TYPE 'none'

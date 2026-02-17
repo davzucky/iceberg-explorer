@@ -90,6 +90,8 @@ class TestHealthEndpoint:
     def test_health_all_healthy(self, client: TestClient):
         """Test health endpoint when everything is healthy."""
         mock_engine = MagicMock()
+        mock_catalog_service = MagicMock()
+        mock_catalog_service.list_namespaces.return_value = []
         mock_engine.is_initialized = True
         mock_engine.health_check.return_value = {
             "healthy": True,
@@ -97,8 +99,12 @@ class TestHealthEndpoint:
             "catalog": True,
         }
 
-        with patch(
-            "iceberg_explorer.api.routes.health.get_engine", return_value=mock_engine
+        with (
+            patch("iceberg_explorer.api.routes.health.get_engine", return_value=mock_engine),
+            patch(
+                "iceberg_explorer.api.routes.health.get_catalog_service",
+                return_value=mock_catalog_service,
+            ),
         ):
             response = client.get("/health")
 
@@ -112,6 +118,8 @@ class TestHealthEndpoint:
     def test_health_duckdb_unhealthy(self, client: TestClient):
         """Test health endpoint when DuckDB is unhealthy."""
         mock_engine = MagicMock()
+        mock_catalog_service = MagicMock()
+        mock_catalog_service.list_namespaces.side_effect = RuntimeError("Catalog connection failed")
         mock_engine.is_initialized = True
         mock_engine.health_check.return_value = {
             "healthy": False,
@@ -120,8 +128,12 @@ class TestHealthEndpoint:
             "error": "DuckDB connection failed",
         }
 
-        with patch(
-            "iceberg_explorer.api.routes.health.get_engine", return_value=mock_engine
+        with (
+            patch("iceberg_explorer.api.routes.health.get_engine", return_value=mock_engine),
+            patch(
+                "iceberg_explorer.api.routes.health.get_catalog_service",
+                return_value=mock_catalog_service,
+            ),
         ):
             response = client.get("/health")
 
@@ -133,6 +145,8 @@ class TestHealthEndpoint:
     def test_health_catalog_unhealthy(self, client: TestClient):
         """Test health endpoint when catalog is unhealthy."""
         mock_engine = MagicMock()
+        mock_catalog_service = MagicMock()
+        mock_catalog_service.list_namespaces.side_effect = RuntimeError("Catalog connection failed")
         mock_engine.is_initialized = True
         mock_engine.health_check.return_value = {
             "healthy": False,
@@ -141,8 +155,12 @@ class TestHealthEndpoint:
             "error": "Catalog connection failed",
         }
 
-        with patch(
-            "iceberg_explorer.api.routes.health.get_engine", return_value=mock_engine
+        with (
+            patch("iceberg_explorer.api.routes.health.get_engine", return_value=mock_engine),
+            patch(
+                "iceberg_explorer.api.routes.health.get_catalog_service",
+                return_value=mock_catalog_service,
+            ),
         ):
             response = client.get("/health")
 
@@ -155,6 +173,8 @@ class TestHealthEndpoint:
     def test_health_engine_not_initialized(self, client: TestClient):
         """Test health endpoint when engine needs initialization."""
         mock_engine = MagicMock()
+        mock_catalog_service = MagicMock()
+        mock_catalog_service.list_namespaces.return_value = []
         mock_engine.is_initialized = False
         mock_engine.health_check.return_value = {
             "healthy": True,
@@ -162,8 +182,12 @@ class TestHealthEndpoint:
             "catalog": True,
         }
 
-        with patch(
-            "iceberg_explorer.api.routes.health.get_engine", return_value=mock_engine
+        with (
+            patch("iceberg_explorer.api.routes.health.get_engine", return_value=mock_engine),
+            patch(
+                "iceberg_explorer.api.routes.health.get_catalog_service",
+                return_value=mock_catalog_service,
+            ),
         ):
             response = client.get("/health")
 
@@ -172,9 +196,17 @@ class TestHealthEndpoint:
 
     def test_health_engine_exception(self, client: TestClient):
         """Test health endpoint when engine throws exception."""
-        with patch(
-            "iceberg_explorer.api.routes.health.get_engine",
-            side_effect=RuntimeError("Engine initialization failed"),
+        mock_catalog_service = MagicMock()
+        mock_catalog_service.list_namespaces.side_effect = RuntimeError("Catalog connection failed")
+        with (
+            patch(
+                "iceberg_explorer.api.routes.health.get_engine",
+                side_effect=RuntimeError("Engine initialization failed"),
+            ),
+            patch(
+                "iceberg_explorer.api.routes.health.get_catalog_service",
+                return_value=mock_catalog_service,
+            ),
         ):
             response = client.get("/health")
 
@@ -187,6 +219,8 @@ class TestHealthEndpoint:
     def test_health_includes_version(self, client: TestClient):
         """Test health endpoint includes version."""
         mock_engine = MagicMock()
+        mock_catalog_service = MagicMock()
+        mock_catalog_service.list_namespaces.return_value = []
         mock_engine.is_initialized = True
         mock_engine.health_check.return_value = {
             "healthy": True,
@@ -194,8 +228,12 @@ class TestHealthEndpoint:
             "catalog": True,
         }
 
-        with patch(
-            "iceberg_explorer.api.routes.health.get_engine", return_value=mock_engine
+        with (
+            patch("iceberg_explorer.api.routes.health.get_engine", return_value=mock_engine),
+            patch(
+                "iceberg_explorer.api.routes.health.get_catalog_service",
+                return_value=mock_catalog_service,
+            ),
         ):
             response = client.get("/health")
 
@@ -205,6 +243,8 @@ class TestHealthEndpoint:
     def test_health_degraded_status(self, client: TestClient):
         """Test health returns degraded when partially healthy."""
         mock_engine = MagicMock()
+        mock_catalog_service = MagicMock()
+        mock_catalog_service.list_namespaces.side_effect = RuntimeError("Catalog timeout")
         mock_engine.is_initialized = True
         mock_engine.health_check.return_value = {
             "healthy": False,
@@ -213,8 +253,12 @@ class TestHealthEndpoint:
             "error": "Catalog timeout",
         }
 
-        with patch(
-            "iceberg_explorer.api.routes.health.get_engine", return_value=mock_engine
+        with (
+            patch("iceberg_explorer.api.routes.health.get_engine", return_value=mock_engine),
+            patch(
+                "iceberg_explorer.api.routes.health.get_catalog_service",
+                return_value=mock_catalog_service,
+            ),
         ):
             response = client.get("/health")
 
@@ -229,6 +273,8 @@ class TestReadyEndpoint:
     def test_ready_when_healthy(self, client: TestClient):
         """Test ready endpoint when everything is healthy."""
         mock_engine = MagicMock()
+        mock_catalog_service = MagicMock()
+        mock_catalog_service.list_namespaces.return_value = []
         mock_engine.is_initialized = True
         mock_engine.health_check.return_value = {
             "healthy": True,
@@ -236,8 +282,12 @@ class TestReadyEndpoint:
             "catalog": True,
         }
 
-        with patch(
-            "iceberg_explorer.api.routes.health.get_engine", return_value=mock_engine
+        with (
+            patch("iceberg_explorer.api.routes.health.get_engine", return_value=mock_engine),
+            patch(
+                "iceberg_explorer.api.routes.health.get_catalog_service",
+                return_value=mock_catalog_service,
+            ),
         ):
             response = client.get("/ready")
 
@@ -251,9 +301,7 @@ class TestReadyEndpoint:
         mock_engine = MagicMock()
         mock_engine.is_initialized = False
 
-        with patch(
-            "iceberg_explorer.api.routes.health.get_engine", return_value=mock_engine
-        ):
+        with patch("iceberg_explorer.api.routes.health.get_engine", return_value=mock_engine):
             response = client.get("/ready")
 
         assert response.status_code == 503
@@ -272,9 +320,7 @@ class TestReadyEndpoint:
             "error": "Catalog connection refused",
         }
 
-        with patch(
-            "iceberg_explorer.api.routes.health.get_engine", return_value=mock_engine
-        ):
+        with patch("iceberg_explorer.api.routes.health.get_engine", return_value=mock_engine):
             response = client.get("/ready")
 
         assert response.status_code == 503
@@ -306,9 +352,7 @@ class TestReadyEndpoint:
             "error": "DuckDB out of memory",
         }
 
-        with patch(
-            "iceberg_explorer.api.routes.health.get_engine", return_value=mock_engine
-        ):
+        with patch("iceberg_explorer.api.routes.health.get_engine", return_value=mock_engine):
             response = client.get("/ready")
 
         assert response.status_code == 503
@@ -326,9 +370,7 @@ class TestReadyEndpoint:
             "error": "Catalog timeout",
         }
 
-        with patch(
-            "iceberg_explorer.api.routes.health.get_engine", return_value=mock_engine
-        ):
+        with patch("iceberg_explorer.api.routes.health.get_engine", return_value=mock_engine):
             response = client.get("/ready")
 
         assert response.status_code == 503

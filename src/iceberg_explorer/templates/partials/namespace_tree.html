@@ -9,6 +9,7 @@
                 hx-get="/ui/partials/namespace-children?parent={{ ns.encoded_path }}"
                 hx-target="#children-{{ ns.id }}"
                 hx-trigger="click once"
+                hx-request='{"timeout":7000}'
                 hx-swap="innerHTML"
                 hx-indicator="#loading-{{ ns.id }}"
             >

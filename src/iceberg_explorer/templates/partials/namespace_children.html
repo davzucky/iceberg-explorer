@@ -9,6 +9,7 @@
             hx-get="/ui/partials/namespace-children?parent={{ ns.encoded_path }}"
             hx-target="#children-{{ ns.id }}"
             hx-trigger="click once"
+            hx-request='{"timeout":7000}'
             hx-swap="innerHTML"
             hx-indicator="#loading-{{ ns.id }}"
         >
@@ -54,6 +55,7 @@
             class="flex w-full items-center rounded-md px-2 py-1.5 text-sm text-gray-700 hover:bg-iceberg-50 hover:text-iceberg-700 group"
             hx-get="/ui/partials/table-details?table_path={{ table.table_path }}"
             hx-target="#main-content"
+            hx-request='{"timeout":7000}'
             hx-swap="innerHTML"
             hx-indicator="#table-loading-{{ table.id }}"
         >

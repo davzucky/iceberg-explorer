@@ -168,6 +168,48 @@ class QueryExecutor:
             QueryTimeoutError: If query exceeds timeout.
             QueryCancelledError: If query is cancelled.
         """
+        result, validated_timeout, cancel_event = self._prepare_query(sql, timeout)
+        self._run_query_lifecycle(
+            result=result,
+            validated_timeout=validated_timeout,
+            cancel_event=cancel_event,
+            raise_errors=True,
+        )
+        return result
+
+    def submit(self, sql: str, timeout: int | None = None) -> QueryResult:
+        """Submit a query for asynchronous execution and return immediately.
+
+        Args:
+            sql: SQL query to execute.
+            timeout: Query timeout in seconds (10-3600). Defaults to configured value.
+
+        Returns:
+            QueryResult in pending/running state with query_id available immediately.
+        """
+        result, validated_timeout, cancel_event = self._prepare_query(sql, timeout)
+        result.set_running()
+
+        thread = threading.Thread(
+            target=self._run_query_lifecycle,
+            kwargs={
+                "result": result,
+                "validated_timeout": validated_timeout,
+                "cancel_event": cancel_event,
+                "raise_errors": False,
+            },
+            daemon=True,
+        )
+        thread.start()
+        return result
+
+    def _prepare_query(
+        self, sql: str, timeout: int | None
+    ) -> tuple[QueryResult, int, threading.Event]:
+        """Validate SQL and register query state before execution."""
+        if not self._engine.is_initialized:
+            self._engine.initialize()
+
         validate_sql(sql)
         validated_timeout = self._validate_timeout(timeout)
 
@@ -178,6 +220,17 @@ class QueryExecutor:
             self._active_queries[result.query_id] = result
             self._cancel_flags[result.query_id] = cancel_event
 
+        return result, validated_timeout, cancel_event
+
+    def _run_query_lifecycle(
+        self,
+        result: QueryResult,
+        validated_timeout: int,
+        cancel_event: threading.Event,
+        *,
+        raise_errors: bool,
+    ) -> None:
+        """Run query execution with tracing/metrics lifecycle handling."""
         tracer = get_tracer()
         with tracer.start_as_current_span(
             "duckdb.query",
@@ -190,7 +243,8 @@ class QueryExecutor:
 
             increment_active_queries()
             try:
-                result.set_running()
+                if result.state != QueryState.RUNNING:
+                    result.set_running()
                 self._execute_query(result, validated_timeout, cancel_event)
 
                 if result.metrics:
@@ -204,26 +258,27 @@ class QueryExecutor:
                 span.set_attribute("query.status", "timeout")
                 span.set_status(trace.Status(trace.StatusCode.ERROR, "Query timeout"))
                 record_query_duration(validated_timeout, "timeout")
-                raise
+                if raise_errors:
+                    raise
             except QueryCancelledError:
                 span.set_attribute("query.status", "cancelled")
                 span.set_status(trace.Status(trace.StatusCode.OK, "Query cancelled"))
                 if result.metrics:
                     record_query_duration(result.metrics.duration_seconds, "cancelled")
-                raise
+                if raise_errors:
+                    raise
             except Exception as e:
                 span.set_attribute("query.status", "failed")
                 span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
                 span.record_exception(e)
                 if result.metrics:
                     record_query_duration(result.metrics.duration_seconds, "failed")
-                raise
+                if raise_errors:
+                    raise
             finally:
                 decrement_active_queries()
                 with self._lock:
                     self._cancel_flags.pop(result.query_id, None)
-
-        return result
 
     def _execute_query(
         self, result: QueryResult, timeout: int, cancel_event: threading.Event
@@ -251,7 +306,20 @@ class QueryExecutor:
                     if cancel_event.is_set():
                         return
 
-                    arrow_result = conn.execute(result.sql).fetch_arrow_table()
+                    catalog_name = self._engine.catalog_name.replace('"', '""')
+                    with contextlib.suppress(Exception):
+                        conn.execute(f'USE "{catalog_name}"')
+
+                    try:
+                        arrow_result = conn.execute(result.sql).fetch_arrow_table()
+                    except Exception as first_error:
+                        rewritten_sql = self._rewrite_sql_with_catalog_hint(
+                            result.sql,
+                            str(first_error),
+                        )
+                        if rewritten_sql is None:
+                            raise
+                        arrow_result = conn.execute(rewritten_sql).fetch_arrow_table()
 
                     if cancel_event.is_set():
                         return
@@ -290,6 +358,39 @@ class QueryExecutor:
             error = exception_holder[0]
             result.set_failed(str(error))
             raise error
+
+    def _rewrite_sql_with_catalog_hint(self, sql: str, error_text: str) -> str | None:
+        """Rewrite `schema.table` references when DuckDB suggests a catalog qualifier.
+
+        DuckDB commonly returns errors like:
+        `Did you mean "default.sales.orders"?`
+        for queries written as `sales.orders`. This helper retries by rewriting one
+        matching table reference to the suggested catalog-qualified form.
+        """
+        match = re.search(r'Did you mean "([^"]+)"\?', error_text)
+        if not match:
+            return None
+
+        suggested = match.group(1)
+        parts = suggested.split(".")
+        if len(parts) < 3:
+            return None
+
+        catalog = parts[0]
+        schema = parts[1]
+        table = ".".join(parts[2:])
+
+        unqualified = f"{schema}.{table}"
+        qualified = f'"{catalog}".{schema}.{table}'
+
+        if qualified in sql or unqualified not in sql:
+            return None
+
+        return re.sub(
+            rf"(?<![\w.\"])({re.escape(unqualified)})(?![\w\"])",
+            qualified,
+            sql,
+        )
 
     def cancel(self, query_id: UUID) -> bool:
         """Cancel a running query.

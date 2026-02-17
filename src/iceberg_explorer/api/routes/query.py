@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import AsyncGenerator
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query
@@ -27,7 +28,7 @@ from iceberg_explorer.models.query import (
     ResultsMetadata,
     ResultsProgress,
 )
-from iceberg_explorer.query.executor import get_executor, validate_sql
+from iceberg_explorer.query.executor import QueryExecutor, get_executor, validate_sql
 from iceberg_explorer.query.models import InvalidSQLError, QueryState
 
 router = APIRouter(prefix="/api/v1/query", tags=["query"])
@@ -61,7 +62,11 @@ async def execute_query(
     executor = get_executor()
 
     try:
-        result = await asyncio.to_thread(executor.execute, request.sql, request.timeout)
+        if isinstance(executor, QueryExecutor):
+            result = executor.submit(request.sql, request.timeout)
+        else:
+            # Test doubles may not implement submit(); preserve synchronous fallback.
+            result = await asyncio.to_thread(executor.execute, request.sql, request.timeout)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -71,12 +76,13 @@ async def execute_query(
     )
 
 
-def _convert_value(value: object) -> object:
+def _convert_value(value: Any) -> object:
     """Convert Arrow values to JSON-serializable Python types."""
     if value is None:
         return None
-    if hasattr(value, "as_py"):
-        return value.as_py()
+    as_py = getattr(value, "as_py", None)
+    if callable(as_py):
+        return as_py()
     return value
 
 
