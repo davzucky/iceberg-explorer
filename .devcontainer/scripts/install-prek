@@ -8,3 +8,4 @@ if ! command -v prek >/dev/null 2>&1; then
 fi
 
 prek install
+prek install-hooks
