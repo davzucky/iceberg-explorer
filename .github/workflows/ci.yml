@@ -33,7 +33,7 @@ jobs:
         run: uv run pytest
 
       - name: Start Lakekeeper and MinIO services
-        run: docker compose -f docker/docker-compose.ci.yml up -d --wait
+        run: docker compose -f docker/docker-compose.ci.yml up -d
 
       - name: Verify service endpoints
         run: |
