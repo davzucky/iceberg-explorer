@@ -1,0 +1,226 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref (branch or SHA) used to create the release tag"
+        required: false
+        default: "main"
+
+jobs:
+  release:
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+      pull-requests: write
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || github.ref }}
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.14"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@e4db8464a088ece1b920f60402e813ea4de65b8f
+        with:
+          enable-cache: true
+
+      - name: Resolve release metadata
+        id: meta
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          REPO_OWNER: ${{ github.repository_owner }}
+        run: |
+          ACTUAL_SHA=$(git rev-parse HEAD)
+          export ACTUAL_SHA
+          python - <<'PY'
+          import os
+          import re
+          import sys
+          import tomllib
+          from pathlib import Path
+
+          pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+          pyproject_version = pyproject["project"]["version"]
+
+          event_name = os.environ["EVENT_NAME"]
+          ref_name = os.environ["REF_NAME"]
+
+          if event_name == "push":
+              if not ref_name.startswith("v"):
+                  print(f"Expected tag ref, got: {ref_name}", file=sys.stderr)
+                  sys.exit(1)
+              tag = ref_name
+              version = tag[1:]
+              if version != pyproject_version:
+                  print(
+                      "Tag version "
+                      f"({version}) does not match pyproject.toml version ({pyproject_version})",
+                      file=sys.stderr,
+                  )
+                  sys.exit(1)
+          else:
+              version = pyproject_version
+              tag = f"v{version}"
+
+          semver_match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", version)
+          if not semver_match:
+              print(
+                  "Version must be strict semantic version X.Y.Z for release automation; "
+                  f"got: {version}",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+
+          major, minor, patch = (int(part) for part in semver_match.groups())
+          next_version = f"{major}.{minor}.{patch + 1}"
+          image_repo = f"ghcr.io/{os.environ['REPO_OWNER'].lower()}/iceberg-explorer"
+          actual_sha = os.environ["ACTUAL_SHA"]
+
+          output_path = Path(os.environ["GITHUB_OUTPUT"])
+          with output_path.open("a", encoding="utf-8") as output:
+              output.write(f"version={version}\n")
+              output.write(f"tag={tag}\n")
+              output.write(f"next_version={next_version}\n")
+              output.write(f"image_repo={image_repo}\n")
+              output.write(f"image_sha_short={actual_sha[:7]}\n")
+          PY
+
+      - name: Create and push release tag
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git fetch --tags --force
+          if git rev-parse -q --verify "refs/tags/${{ steps.meta.outputs.tag }}" >/dev/null; then
+            echo "Tag ${{ steps.meta.outputs.tag }} already exists"
+            exit 1
+          fi
+          git tag -a "${{ steps.meta.outputs.tag }}" -m "Release ${{ steps.meta.outputs.tag }}"
+          git push origin "${{ steps.meta.outputs.tag }}"
+
+      - name: Build release wheel
+        run: uv build --wheel
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: python-wheel
+          path: dist/*.whl
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Docker image locally
+        run: |
+          docker build \
+            -t "${{ steps.meta.outputs.image_repo }}:${{ steps.meta.outputs.version }}" \
+            -t "${{ steps.meta.outputs.image_repo }}:sha-${{ steps.meta.outputs.image_sha_short }}" \
+            -t "${{ steps.meta.outputs.image_repo }}:latest" \
+            .
+
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2
+        with:
+          scan-type: image
+          image-ref: ${{ steps.meta.outputs.image_repo }}:${{ steps.meta.outputs.version }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Push Docker image tags to GHCR
+        run: |
+          docker push "${{ steps.meta.outputs.image_repo }}:${{ steps.meta.outputs.version }}"
+          docker push "${{ steps.meta.outputs.image_repo }}:sha-${{ steps.meta.outputs.image_sha_short }}"
+          docker push "${{ steps.meta.outputs.image_repo }}:latest"
+
+      - name: Publish wheel to PyPI (Trusted Publishing)
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e
+        with:
+          packages-dir: dist/
+
+      - name: Create GitHub Release with generated notes
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          generate_release_notes: true
+          files: dist/*.whl
+
+      - name: Bump to next patch version
+        env:
+          NEXT_VERSION: ${{ steps.meta.outputs.next_version }}
+        run: |
+          python - <<'PY'
+          import os
+          import re
+          import sys
+          from pathlib import Path
+
+          next_version = os.environ["NEXT_VERSION"]
+
+          pyproject_path = Path("pyproject.toml")
+          pyproject_lines = pyproject_path.read_text(encoding="utf-8").splitlines(keepends=True)
+
+          in_project = False
+          replaced_project_version = False
+          for index, line in enumerate(pyproject_lines):
+              stripped = line.strip()
+              if stripped.startswith("[") and stripped.endswith("]"):
+                  in_project = stripped == "[project]"
+                  continue
+
+              if in_project and stripped.startswith("version"):
+                  pyproject_lines[index] = re.sub(
+                      r'^(\s*version\s*=\s*)".*?"(\s*)$',
+                      rf'\1"{next_version}"\2',
+                      line,
+                  )
+                  replaced_project_version = True
+                  break
+
+          if not replaced_project_version:
+              print("Failed to update [project].version in pyproject.toml", file=sys.stderr)
+              sys.exit(1)
+
+          pyproject_path.write_text("".join(pyproject_lines), encoding="utf-8")
+
+          init_path = Path("src/iceberg_explorer/__init__.py")
+          init_text = init_path.read_text(encoding="utf-8")
+          init_text = re.sub(
+              r'(?m)^__version__ = ".*"$',
+              f'__version__ = "{next_version}"',
+              init_text,
+              count=1,
+          )
+          init_path.write_text(init_text, encoding="utf-8")
+          PY
+
+      - name: Open post-release version bump PR
+        uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676
+        with:
+          commit-message: "chore: bump version to ${{ steps.meta.outputs.next_version }}"
+          title: "chore: bump version to ${{ steps.meta.outputs.next_version }}"
+          body: |
+            Automated post-release patch bump.
+
+            - Released version: ${{ steps.meta.outputs.version }}
+            - New development version: ${{ steps.meta.outputs.next_version }}
+          branch: chore/release-bump-v${{ steps.meta.outputs.next_version }}
+          base: main

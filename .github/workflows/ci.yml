@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  lint-test-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen --all-extras
+
+      - name: Run Ruff
+        run: uv run ruff check src/ tests/
+
+      - name: Run tests
+        run: uv run pytest --cov=src/iceberg_explorer --cov-report=term-missing
+
+      - name: Start Lakekeeper and MinIO services
+        run: docker compose -f docker/docker-compose.ci.yml up -d
+
+      - name: Verify service endpoints
+        run: |
+          curl --fail --retry 15 --retry-delay 2 --retry-connrefused http://localhost:9000/minio/health/live
+          curl --fail --retry 15 --retry-delay 2 --retry-connrefused http://localhost:8181/health
+
+      - name: Build Docker image
+        run: docker build -t iceberg-explorer:ci .
+
+      - name: Show compose logs on failure
+        if: failure()
+        run: docker compose -f docker/docker-compose.ci.yml logs --no-color
+
+      - name: Tear down services
+        if: always()
+        run: docker compose -f docker/docker-compose.ci.yml down -v
