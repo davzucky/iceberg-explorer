@@ -266,7 +266,12 @@ class TestFastAPIIntegration:
         """Test that the FastAPI app is properly instrumented."""
         from iceberg_explorer.main import app
 
-        with patch("iceberg_explorer.api.routes.health.get_engine") as mock_get_engine:
+        with (
+            patch("iceberg_explorer.api.routes.health.get_engine") as mock_get_engine,
+            patch(
+                "iceberg_explorer.api.routes.health.get_catalog_service"
+            ) as mock_get_catalog_service,
+        ):
             mock_engine = MagicMock()
             mock_engine.is_initialized = True
             mock_engine.health_check.return_value = {
@@ -275,6 +280,10 @@ class TestFastAPIIntegration:
                 "catalog": True,
             }
             mock_get_engine.return_value = mock_engine
+
+            mock_catalog_service = MagicMock()
+            mock_catalog_service.list_namespaces.return_value = []
+            mock_get_catalog_service.return_value = mock_catalog_service
 
             client = TestClient(app)
             response = client.get("/health")
