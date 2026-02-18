@@ -12,48 +12,8 @@ on:
         default: "main"
 
 jobs:
-  create-tag:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
-    steps:
-      - name: Check out selected ref
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.inputs.ref || 'main' }}
-
-      - name: Read version from pyproject.toml
-        id: version
-        run: |
-          VERSION=$(python - <<'PY'
-          import tomllib
-          from pathlib import Path
-
-          data = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
-          print(data["project"]["version"])
-          PY
-          )
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
-
-      - name: Ensure tag does not already exist
-        run: |
-          git fetch --tags --force
-          if git rev-parse -q --verify "refs/tags/${{ steps.version.outputs.tag }}" >/dev/null; then
-            echo "Tag ${{ steps.version.outputs.tag }} already exists"
-            exit 1
-          fi
-
-      - name: Create and push release tag
-        run: |
-          git tag -a "${{ steps.version.outputs.tag }}" -m "Release ${{ steps.version.outputs.tag }}"
-          git push origin "${{ steps.version.outputs.tag }}"
-
   release:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -67,6 +27,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || github.ref }}
 
       - name: Set up Python 3.14
         uses: actions/setup-python@v5
@@ -75,35 +36,77 @@ jobs:
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
 
       - name: Resolve release metadata
         id: meta
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          REPO_OWNER: ${{ github.repository_owner }}
         run: |
-          TAG="${GITHUB_REF_NAME}"
-          VERSION="${TAG#v}"
-          PYPROJECT_VERSION=$(python - <<'PY'
+          python - <<'PY'
+          import os
+          import re
+          import sys
           import tomllib
           from pathlib import Path
 
-          data = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
-          print(data["project"]["version"])
+          pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+          pyproject_version = pyproject["project"]["version"]
+
+          event_name = os.environ["EVENT_NAME"]
+          ref_name = os.environ["REF_NAME"]
+
+          if event_name == "push":
+              if not ref_name.startswith("v"):
+                  print(f"Expected tag ref, got: {ref_name}", file=sys.stderr)
+                  sys.exit(1)
+              tag = ref_name
+              version = tag[1:]
+              if version != pyproject_version:
+                  print(
+                      "Tag version "
+                      f"({version}) does not match pyproject.toml version ({pyproject_version})",
+                      file=sys.stderr,
+                  )
+                  sys.exit(1)
+          else:
+              version = pyproject_version
+              tag = f"v{version}"
+
+          semver_match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", version)
+          if not semver_match:
+              print(
+                  "Version must be strict semantic version X.Y.Z for release automation; "
+                  f"got: {version}",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+
+          major, minor, patch = (int(part) for part in semver_match.groups())
+          next_version = f"{major}.{minor}.{patch + 1}"
+          image_repo = f"ghcr.io/{os.environ['REPO_OWNER'].lower()}/iceberg-explorer"
+
+          output_path = Path(os.environ["GITHUB_OUTPUT"])
+          with output_path.open("a", encoding="utf-8") as output:
+              output.write(f"version={version}\n")
+              output.write(f"tag={tag}\n")
+              output.write(f"next_version={next_version}\n")
+              output.write(f"image_repo={image_repo}\n")
           PY
-          )
-          if [ "$VERSION" != "$PYPROJECT_VERSION" ]; then
-            echo "Tag version ($VERSION) does not match pyproject.toml version ($PYPROJECT_VERSION)"
+
+      - name: Create and push release tag
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git fetch --tags --force
+          if git rev-parse -q --verify "refs/tags/${{ steps.meta.outputs.tag }}" >/dev/null; then
+            echo "Tag ${{ steps.meta.outputs.tag }} already exists"
             exit 1
           fi
-
-          IFS='.' read -r major minor patch <<EOF
-          $VERSION
-          EOF
-          NEXT_VERSION="$major.$minor.$((patch + 1))"
-          OWNER_LOWER=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
-          IMAGE_REPO="ghcr.io/${OWNER_LOWER}/iceberg-explorer"
-
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "next_version=$NEXT_VERSION" >> "$GITHUB_OUTPUT"
-          echo "image_repo=$IMAGE_REPO" >> "$GITHUB_OUTPUT"
+          git tag -a "${{ steps.meta.outputs.tag }}" -m "Release ${{ steps.meta.outputs.tag }}"
+          git push origin "${{ steps.meta.outputs.tag }}"
 
       - name: Build release wheel
         run: uv build --wheel
@@ -152,7 +155,7 @@ jobs:
       - name: Create GitHub Release with generated notes
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ steps.meta.outputs.tag }}
           generate_release_notes: true
           files: dist/*.whl
 
@@ -161,20 +164,38 @@ jobs:
           NEXT_VERSION: ${{ steps.meta.outputs.next_version }}
         run: |
           python - <<'PY'
+          import os
           import re
+          import sys
           from pathlib import Path
 
-          next_version = __import__("os").environ["NEXT_VERSION"]
+          next_version = os.environ["NEXT_VERSION"]
 
           pyproject_path = Path("pyproject.toml")
-          pyproject_text = pyproject_path.read_text(encoding="utf-8")
-          pyproject_text = re.sub(
-              r'(?m)^version = ".*"$',
-              f'version = "{next_version}"',
-              pyproject_text,
-              count=1,
-          )
-          pyproject_path.write_text(pyproject_text, encoding="utf-8")
+          pyproject_lines = pyproject_path.read_text(encoding="utf-8").splitlines(keepends=True)
+
+          in_project = False
+          replaced_project_version = False
+          for index, line in enumerate(pyproject_lines):
+              stripped = line.strip()
+              if stripped.startswith("[") and stripped.endswith("]"):
+                  in_project = stripped == "[project]"
+                  continue
+
+              if in_project and stripped.startswith("version"):
+                  pyproject_lines[index] = re.sub(
+                      r'^(\s*version\s*=\s*)".*?"(\s*)$',
+                      rf'\1"{next_version}"\2',
+                      line,
+                  )
+                  replaced_project_version = True
+                  break
+
+          if not replaced_project_version:
+              print("Failed to update [project].version in pyproject.toml", file=sys.stderr)
+              sys.exit(1)
+
+          pyproject_path.write_text("".join(pyproject_lines), encoding="utf-8")
 
           init_path = Path("src/iceberg_explorer/__init__.py")
           init_text = init_path.read_text(encoding="utf-8")
