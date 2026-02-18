@@ -1,3 +1,16 @@
+x-lakekeeper-env: &lakekeeper-env
+  - LAKEKEEPER__PG_ENCRYPTION_KEY=This-is-NOT-Secure!
+  - LAKEKEEPER__PG_DATABASE_URL_READ=postgresql://postgres:postgres@postgres:5432/postgres
+  - LAKEKEEPER__PG_DATABASE_URL_WRITE=postgresql://postgres:postgres@postgres:5432/postgres
+  - LAKEKEEPER__AUTHZ_BACKEND=allowall
+  - LAKEKEEPER__OPENID_PROVIDER_URI
+  - LAKEKEEPER__OPENID_AUDIENCE
+  - LAKEKEEPER__OPENID_ADDITIONAL_ISSUERS
+  - LAKEKEEPER__UI__OPENID_CLIENT_ID
+  - LAKEKEEPER__UI__OPENID_SCOPE
+
+x-lakekeeper-image: &lakekeeper-image ${LAKEKEEPER_CI_IMAGE:-quay.io/lakekeeper/catalog:latest-main}
+
 services:
   minio:
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z
@@ -40,18 +53,9 @@ services:
       start_period: 10s
 
   migrate:
-    image: quay.io/lakekeeper/catalog:cdf87722-amd64
+    image: *lakekeeper-image
     pull_policy: always
-    environment:
-      - LAKEKEEPER__PG_ENCRYPTION_KEY=This-is-NOT-Secure!
-      - LAKEKEEPER__PG_DATABASE_URL_READ=postgresql://postgres:postgres@postgres:5432/postgres
-      - LAKEKEEPER__PG_DATABASE_URL_WRITE=postgresql://postgres:postgres@postgres:5432/postgres
-      - LAKEKEEPER__AUTHZ_BACKEND=allowall
-      - LAKEKEEPER__OPENID_PROVIDER_URI
-      - LAKEKEEPER__OPENID_AUDIENCE
-      - LAKEKEEPER__OPENID_ADDITIONAL_ISSUERS
-      - LAKEKEEPER__UI__OPENID_CLIENT_ID
-      - LAKEKEEPER__UI__OPENID_SCOPE
+    environment: *lakekeeper-env
     restart: "no"
     command: ["migrate"]
     depends_on:
@@ -59,23 +63,14 @@ services:
         condition: service_healthy
 
   lakekeeper:
-    image: quay.io/lakekeeper/catalog:cdf87722-amd64
+    image: *lakekeeper-image
     pull_policy: always
     ports:
       - "8181:8181"
     depends_on:
       migrate:
         condition: service_completed_successfully
-    environment:
-      - LAKEKEEPER__PG_ENCRYPTION_KEY=This-is-NOT-Secure!
-      - LAKEKEEPER__PG_DATABASE_URL_READ=postgresql://postgres:postgres@postgres:5432/postgres
-      - LAKEKEEPER__PG_DATABASE_URL_WRITE=postgresql://postgres:postgres@postgres:5432/postgres
-      - LAKEKEEPER__AUTHZ_BACKEND=allowall
-      - LAKEKEEPER__OPENID_PROVIDER_URI
-      - LAKEKEEPER__OPENID_AUDIENCE
-      - LAKEKEEPER__OPENID_ADDITIONAL_ISSUERS
-      - LAKEKEEPER__UI__OPENID_CLIENT_ID
-      - LAKEKEEPER__UI__OPENID_SCOPE
+    environment: *lakekeeper-env
     command: ["serve"]
     healthcheck:
       test: ["CMD", "/home/nonroot/lakekeeper", "healthcheck"]
