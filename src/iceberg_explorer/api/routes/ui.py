@@ -5,7 +5,7 @@ import hashlib
 import logging
 from pathlib import Path
 from typing import Annotated
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse
@@ -48,16 +48,28 @@ def _generate_id(namespace_parts: list[str]) -> str:
     return hashlib.md5(path.encode(), usedforsecurity=False).hexdigest()[:8]
 
 
+def _normalize_identifier(identifier: str) -> str:
+    """Normalize a table/namespace identifier from URL input."""
+    normalized = unquote(identifier).strip()
+    quote_pairs = {'"': '"', "'": "'", "`": "`", "[": "]"}
+    if (
+        len(normalized) >= 2
+        and normalized[0] in quote_pairs
+        and normalized[-1] == quote_pairs[normalized[0]]
+    ):
+        opening_quote = normalized[0]
+        normalized = normalized[1:-1].strip()
+        escaped_quote = "]]" if opening_quote == "[" else opening_quote * 2
+        normalized = normalized.replace(
+            escaped_quote, "]" if opening_quote == "[" else opening_quote
+        )
+    return normalized
+
+
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request) -> HTMLResponse:
     """Render the main catalog browser page."""
     return templates.TemplateResponse(request, "index.html")
-
-
-@router.get("/query", response_class=HTMLResponse)
-async def query_page(request: Request) -> HTMLResponse:
-    """Render the query editor page."""
-    return templates.TemplateResponse(request, "query.html")
 
 
 @router.get("/ui/partials/namespace-tree", response_class=HTMLResponse)
@@ -188,15 +200,18 @@ async def table_details_partial(
 
     table_info: dict = {}
     error: str | None = None
+    prefill_sql: str = ""
 
     try:
         if "." not in table_path:
             error = "Invalid table path format"
         else:
             last_dot = table_path.rfind(".")
-            namespace_str = table_path[:last_dot]
-            table_name = table_path[last_dot + 1 :]
-            namespace_parts = _parse_namespace(namespace_str)
+            namespace_str = unquote(table_path[:last_dot])
+            table_name = _normalize_identifier(table_path[last_dot + 1 :])
+            namespace_parts = [
+                _normalize_identifier(part) for part in _parse_namespace(namespace_str)
+            ]
 
             # Validate namespace and table name are not empty
             if not namespace_parts:
@@ -267,6 +282,8 @@ async def table_details_partial(
                     "snapshots": snapshots,
                     "current_snapshot": current_snapshot,
                 }
+                qualified_identifier = ".".join([*namespace_parts, table_name])
+                prefill_sql = f"SELECT * FROM {qualified_identifier} LIMIT 100"
     except NoSuchTableError:
         error = "Table not found"
     except Exception:
@@ -276,5 +293,5 @@ async def table_details_partial(
     return templates.TemplateResponse(
         request,
         "partials/table_details.html",
-        {"table": table_info, "error": error},
+        {"table": table_info, "error": error, "prefill_sql": prefill_sql},
     )

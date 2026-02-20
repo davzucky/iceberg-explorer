@@ -366,6 +366,20 @@ class TestQueryExecutor:
         assert rewritten is not None
         assert rewritten.count('"default".sales.orders') == 2
 
+    def test_rewrite_sql_with_catalog_hint_quoted_identifiers(self, mock_engine: DuckDBEngine):
+        """Rewrite quoted schema/table references with catalog qualifier."""
+        executor = QueryExecutor(engine=mock_engine)
+
+        sql = 'SELECT * FROM "sales"."orders" LIMIT 10'
+        error = (
+            "Catalog Error: Table with name orders does not exist! "
+            'Did you mean "default.sales.orders"?'
+        )
+
+        rewritten = executor._rewrite_sql_with_catalog_hint(sql, error)
+
+        assert rewritten == 'SELECT * FROM "default"."sales"."orders" LIMIT 10'
+
 
 class TestQueryCancellation:
     """Tests for query cancellation."""
