@@ -54,12 +54,6 @@ async def index(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request, "index.html")
 
 
-@router.get("/query", response_class=HTMLResponse)
-async def query_page(request: Request) -> HTMLResponse:
-    """Render the query editor page."""
-    return templates.TemplateResponse(request, "query.html")
-
-
 @router.get("/ui/partials/namespace-tree", response_class=HTMLResponse)
 async def namespace_tree_partial(request: Request) -> HTMLResponse:
     """Render the namespace tree with top-level namespaces from the catalog."""
@@ -188,6 +182,7 @@ async def table_details_partial(
 
     table_info: dict = {}
     error: str | None = None
+    prefill_sql: str = ""
 
     try:
         if "." not in table_path:
@@ -267,6 +262,7 @@ async def table_details_partial(
                     "snapshots": snapshots,
                     "current_snapshot": current_snapshot,
                 }
+                prefill_sql = f"SELECT * FROM {'.'.join([*namespace_parts, table_name])} LIMIT 100"
     except NoSuchTableError:
         error = "Table not found"
     except Exception:
@@ -276,5 +272,5 @@ async def table_details_partial(
     return templates.TemplateResponse(
         request,
         "partials/table_details.html",
-        {"table": table_info, "error": error},
+        {"table": table_info, "error": error, "prefill_sql": prefill_sql},
     )

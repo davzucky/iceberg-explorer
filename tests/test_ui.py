@@ -1,5 +1,7 @@
 """Tests for web UI routes."""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -32,15 +34,12 @@ class TestIndexPage:
         assert "alpinejs" in content
         assert "tailwindcss" in content.lower() or "tailwind" in content.lower()
 
-    def test_index_has_navigation(self, client: TestClient) -> None:
-        """Index page has navigation links."""
+    def test_index_does_not_show_top_nav_tabs(self, client: TestClient) -> None:
+        """Index page does not show legacy Catalog/Query top tabs."""
         response = client.get("/")
         content = response.text
 
-        assert 'href="/"' in content
-        assert 'href="/query"' in content
-        assert "Catalog" in content
-        assert "Query" in content
+        assert 'href="/query"' not in content
 
     def test_index_has_sidebar(self, client: TestClient) -> None:
         """Index page has sidebar for namespaces."""
@@ -51,98 +50,13 @@ class TestIndexPage:
         assert "sidebar" in content.lower()
 
 
-class TestQueryPage:
-    """Tests for the query page."""
+class TestQueryRoute:
+    """Tests for removed query route."""
 
-    def test_query_page_returns_html(self, client: TestClient) -> None:
-        """Query page returns HTML content."""
+    def test_query_route_is_not_available(self, client: TestClient) -> None:
+        """Legacy query page route returns not found."""
         response = client.get("/query")
-        assert response.status_code == 200
-        assert "text/html" in response.headers["content-type"]
-
-    def test_query_page_contains_base_elements(self, client: TestClient) -> None:
-        """Query page contains expected base layout elements."""
-        response = client.get("/query")
-        content = response.text
-
-        assert "Iceberg Explorer" in content
-        assert "<!DOCTYPE html>" in content
-
-    def test_query_page_has_editor_placeholder(self, client: TestClient) -> None:
-        """Query page has SQL editor placeholder."""
-        response = client.get("/query")
-        content = response.text
-
-        assert "SQL Query Editor" in content
-
-    def test_query_page_has_results_placeholder(self, client: TestClient) -> None:
-        """Query page has results placeholder."""
-        response = client.get("/query")
-        content = response.text
-
-        assert "Results" in content
-
-    def test_query_page_has_editor_container(self, client: TestClient) -> None:
-        """Query page includes editor container and local textarea fallback."""
-        response = client.get("/query")
-        content = response.text
-
-        assert 'id="editor-container"' in content
-        assert "createElement('textarea')" in content
-
-    def test_query_page_has_run_button(self, client: TestClient) -> None:
-        """Query page has Run Query button."""
-        response = client.get("/query")
-        content = response.text
-
-        assert "Run Query" in content
-        assert "executeQuery()" in content
-
-    def test_query_page_has_cancel_button(self, client: TestClient) -> None:
-        """Query page has Cancel button for stopping queries."""
-        response = client.get("/query")
-        content = response.text
-
-        assert "Cancel" in content
-        assert "cancelQuery()" in content
-
-    def test_query_page_has_timeout_selector(self, client: TestClient) -> None:
-        """Query page has timeout dropdown selector."""
-        response = client.get("/query")
-        content = response.text
-
-        assert "Timeout:" in content
-        assert "<select" in content
-        assert 'value="30"' in content  # 30s option
-        assert 'value="60"' in content  # 60s option
-        assert 'value="300"' in content  # 5m option
-        assert 'value="900"' in content  # 15m option
-        assert 'value="3600"' in content  # 1h option
-
-    def test_query_page_has_error_display_area(self, client: TestClient) -> None:
-        """Query page has area for displaying errors."""
-        response = client.get("/query")
-        content = response.text
-
-        assert "Query Error" in content
-        assert "error" in content.lower()
-
-    def test_query_page_has_alpine_js_component(self, client: TestClient) -> None:
-        """Query page has Alpine.js queryEditor component."""
-        response = client.get("/query")
-        content = response.text
-
-        assert "queryEditor()" in content
-        assert "x-data" in content
-        assert "x-init" in content
-
-    def test_query_page_has_keyboard_shortcut(self, client: TestClient) -> None:
-        """Query page supports Ctrl+Enter keyboard shortcut."""
-        response = client.get("/query")
-        content = response.text
-
-        assert "event.ctrlKey" in content or "event.metaKey" in content
-        assert "event.key === 'Enter'" in content
+        assert response.status_code == 404
 
 
 class TestNamespaceTreePartial:
@@ -201,6 +115,38 @@ class TestTableDetailsPartial:
         content = response.text
         # Should either show an error message or return a non-200 status
         assert ("Error" in content or "error" in content) or response.status_code != 200
+
+    def test_table_details_includes_query_tab_and_prefill(self, client: TestClient) -> None:
+        """Table details include query UI with default SQL for the selected table."""
+        mock_catalog_service = MagicMock()
+        mock_catalog_service.get_table_details.return_value = {
+            "location": "s3://warehouse/sales/orders",
+            "partition_spec": {"fields": []},
+            "snapshots": [],
+            "snapshot_id": None,
+        }
+        mock_catalog_service.get_table_schema.return_value = {
+            "fields": [
+                {
+                    "name": "order_id",
+                    "type": "bigint",
+                    "nullable": False,
+                    "field_id": 1,
+                }
+            ]
+        }
+
+        with patch(
+            "iceberg_explorer.api.routes.ui.get_catalog_service",
+            return_value=mock_catalog_service,
+        ):
+            response = client.get("/ui/partials/table-details?table_path=sales.orders")
+
+        content = response.text
+        assert response.status_code == 200
+        assert "SQL Query Editor" in content
+        assert "Run Query" in content
+        assert "SELECT * FROM sales.orders LIMIT 100" in content
 
 
 class TestResponsiveDesign:
