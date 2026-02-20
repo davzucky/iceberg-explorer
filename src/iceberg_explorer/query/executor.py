@@ -380,17 +380,40 @@ class QueryExecutor:
         schema = parts[1]
         table = ".".join(parts[2:])
 
-        unqualified = f"{schema}.{table}"
-        qualified = f'"{catalog}".{schema}.{table}'
+        escaped_catalog = catalog.replace('"', '""')
+        escaped_schema = schema.replace('"', '""')
+        escaped_table = table.replace('"', '""')
 
-        if qualified in sql or unqualified not in sql:
+        catalog_qualified_pattern = (
+            rf'"{re.escape(escaped_catalog)}"\.(?:"{re.escape(escaped_schema)}"|{re.escape(schema)})\.'
+            rf'(?:"{re.escape(escaped_table)}"|{re.escape(table)})'
+        )
+        if re.search(catalog_qualified_pattern, sql):
             return None
 
-        return re.sub(
-            rf"(?<![\w.\"])({re.escape(unqualified)})(?![\w\"])",
-            qualified,
-            sql,
+        plain_reference = f"{schema}.{table}"
+        quoted_reference = f'"{escaped_schema}"."{escaped_table}"'
+        plain_replacement = f'"{escaped_catalog}".{schema}.{table}'
+        quoted_replacement = f'"{escaped_catalog}"."{escaped_schema}"."{escaped_table}"'
+
+        rewritten_sql = sql
+        rewritten = False
+
+        rewritten_sql, plain_count = re.subn(
+            rf"(?<![\w.\"])({re.escape(plain_reference)})(?![\w\"])",
+            plain_replacement,
+            rewritten_sql,
         )
+        rewritten = rewritten or plain_count > 0
+
+        rewritten_sql, quoted_count = re.subn(
+            rf"(?<![\w.])({re.escape(quoted_reference)})(?![\w\"])",
+            quoted_replacement,
+            rewritten_sql,
+        )
+        rewritten = rewritten or quoted_count > 0
+
+        return rewritten_sql if rewritten else None
 
     def cancel(self, query_id: UUID) -> bool:
         """Cancel a running query.

@@ -18,6 +18,10 @@
         overflow: auto;
     }
 
+    .query-results-table {
+        --table-header-height: 36px;
+    }
+
     .query-results-table th {
         position: sticky;
         top: 0;
@@ -27,7 +31,7 @@
 
     .query-filter-row th {
         position: sticky;
-        top: 36px;
+        top: var(--table-header-height);
         background: #f9fafb;
         z-index: 9;
     }
@@ -192,7 +196,7 @@
             </div>
         </div>
 
-        <div x-show="activeTab === 'query'" x-cloak class="space-y-4" x-data="tableQueryEditor({{ prefill_sql | tojson }})" x-init="initEditor()">
+        <div x-show="activeTab === 'query'" x-cloak class="space-y-4" x-data='tableQueryEditor({{ prefill_sql | tojson }})' x-init="initEditor()">
             <div class="rounded-lg bg-white p-6 shadow">
                 <div class="flex items-center justify-between mb-4">
                     <h2 class="text-lg font-semibold text-gray-900">SQL Query Editor</h2>
@@ -518,6 +522,7 @@ function tableQueryEditor(defaultSql) {
         status: null,
         resultSummary: null,
         pollInterval: null,
+        resizeHandler: null,
         columns: [],
         allRows: [],
         filteredRows: [],
@@ -567,6 +572,30 @@ function tableQueryEditor(defaultSql) {
             container.appendChild(textarea);
             this.fallbackEditor = textarea;
             this.sql = textarea.value;
+
+            this.updateFilterRowOffset();
+            if (!this.resizeHandler) {
+                this.resizeHandler = () => this.updateFilterRowOffset();
+                window.addEventListener('resize', this.resizeHandler);
+            }
+        },
+
+        destroy() {
+            this.stopStatusPolling();
+            if (this.resizeHandler) {
+                window.removeEventListener('resize', this.resizeHandler);
+                this.resizeHandler = null;
+            }
+        },
+
+        updateFilterRowOffset() {
+            const tableElement = this.$root?.querySelector('.query-results-table');
+            const headerCell = this.$root?.querySelector('.query-results-table thead tr:first-child th');
+            if (!tableElement || !headerCell) {
+                return;
+            }
+            const headerHeight = Math.ceil(headerCell.getBoundingClientRect().height);
+            tableElement.style.setProperty('--table-header-height', `${headerHeight}px`);
         },
 
         resetResults() {

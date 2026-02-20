@@ -148,6 +148,37 @@ class TestTableDetailsPartial:
         assert "Run Query" in content
         assert "SELECT * FROM sales.orders LIMIT 100" in content
 
+    def test_table_details_normalizes_quoted_table_name(self, client: TestClient) -> None:
+        """Quoted table path input is normalized before backend lookup/prefill."""
+        mock_catalog_service = MagicMock()
+        mock_catalog_service.get_table_details.return_value = {
+            "location": "s3://warehouse/sales/orders",
+            "partition_spec": {"fields": []},
+            "snapshots": [],
+            "snapshot_id": None,
+        }
+        mock_catalog_service.get_table_schema.return_value = {
+            "fields": [
+                {
+                    "name": "order_id",
+                    "type": "bigint",
+                    "nullable": False,
+                    "field_id": 1,
+                }
+            ]
+        }
+
+        with patch(
+            "iceberg_explorer.api.routes.ui.get_catalog_service",
+            return_value=mock_catalog_service,
+        ):
+            response = client.get("/ui/partials/table-details?table_path=sales.%22orders%22")
+
+        content = response.text
+        assert response.status_code == 200
+        assert "SELECT * FROM sales.orders LIMIT 100" in content
+        mock_catalog_service.get_table_details.assert_called_once_with("sales", "orders")
+
 
 class TestResponsiveDesign:
     """Tests for responsive design elements."""
