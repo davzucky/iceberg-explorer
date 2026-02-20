@@ -393,6 +393,9 @@ class QueryExecutor:
 
         plain_reference = f"{schema}.{table}"
         quoted_reference = f'"{escaped_schema}"."{escaped_table}"'
+        # Preserve the user's unquoted style for plain references by quoting only the catalog.
+        # This keeps retries minimally invasive, while fully quoted references are handled via
+        # quoted_reference/quoted_replacement when strict identifier escaping is required.
         plain_replacement = f'"{escaped_catalog}".{schema}.{table}'
         quoted_replacement = f'"{escaped_catalog}"."{escaped_schema}"."{escaped_table}"'
 
@@ -401,14 +404,14 @@ class QueryExecutor:
 
         rewritten_sql, plain_count = re.subn(
             rf"(?<![\w.\"])({re.escape(plain_reference)})(?![\w\"])",
-            plain_replacement,
+            lambda _: plain_replacement,
             rewritten_sql,
         )
         rewritten = rewritten or plain_count > 0
 
         rewritten_sql, quoted_count = re.subn(
             rf"(?<![\w.])({re.escape(quoted_reference)})(?![\w\"])",
-            quoted_replacement,
+            lambda _: quoted_replacement,
             rewritten_sql,
         )
         rewritten = rewritten or quoted_count > 0

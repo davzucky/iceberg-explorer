@@ -57,7 +57,12 @@ def _normalize_identifier(identifier: str) -> str:
         and normalized[0] in quote_pairs
         and normalized[-1] == quote_pairs[normalized[0]]
     ):
+        opening_quote = normalized[0]
         normalized = normalized[1:-1].strip()
+        escaped_quote = "]]" if opening_quote == "[" else opening_quote * 2
+        normalized = normalized.replace(
+            escaped_quote, "]" if opening_quote == "[" else opening_quote
+        )
     return normalized
 
 

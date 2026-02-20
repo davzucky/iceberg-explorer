@@ -179,6 +179,37 @@ class TestTableDetailsPartial:
         assert "SELECT * FROM sales.orders LIMIT 100" in content
         mock_catalog_service.get_table_details.assert_called_once_with("sales", "orders")
 
+    def test_table_details_unescapes_doubled_quotes_in_identifier(self, client: TestClient) -> None:
+        """Quoted identifiers with doubled quotes are normalized and unescaped."""
+        mock_catalog_service = MagicMock()
+        mock_catalog_service.get_table_details.return_value = {
+            "location": 's3://warehouse/sales/my"orders',
+            "partition_spec": {"fields": []},
+            "snapshots": [],
+            "snapshot_id": None,
+        }
+        mock_catalog_service.get_table_schema.return_value = {
+            "fields": [
+                {
+                    "name": "order_id",
+                    "type": "bigint",
+                    "nullable": False,
+                    "field_id": 1,
+                }
+            ]
+        }
+
+        with patch(
+            "iceberg_explorer.api.routes.ui.get_catalog_service",
+            return_value=mock_catalog_service,
+        ):
+            response = client.get(
+                "/ui/partials/table-details?table_path=sales.%22my%22%22orders%22"
+            )
+
+        assert response.status_code == 200
+        mock_catalog_service.get_table_details.assert_called_once_with("sales", 'my"orders')
+
 
 class TestResponsiveDesign:
     """Tests for responsive design elements."""
