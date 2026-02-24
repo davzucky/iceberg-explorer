@@ -42,7 +42,7 @@ Create a devcontainer configuration for Iceberg Explorer that enables local deve
 - [ ] Garage service defined in docker-compose.yml
 - [ ] Garage S3 API accessible on port 3900 within container network
 - [ ] Garage admin API accessible on port 3903 from host browser
-- [ ] Default credentials configured (minioadmin/minioadmin for dev)
+- [ ] Default AWS-style access key and secret configured for dev (`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`)
 - [ ] `iceberg-warehouse` bucket automatically created on startup
 - [ ] Garage healthcheck passes before dependent services start
 

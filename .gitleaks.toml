@@ -1,0 +1,5 @@
+[allowlist]
+description = "Dev-only Garage tokens in local/CI config"
+paths = [
+  '''docker/garage\.toml''',
+]

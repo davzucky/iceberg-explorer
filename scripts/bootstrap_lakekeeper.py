@@ -8,11 +8,12 @@ import time
 from pathlib import Path
 from urllib import error, parse, request
 
+import structlog
+
 GARAGE_ADMIN_BASE_URL = os.getenv("GARAGE_ADMIN_BASE_URL", "http://localhost:3903")
 LAKEKEEPER_BASE_URL = "http://lakekeeper:8181"
 GARAGE_BUCKET_NAME = "iceberg-warehouse"
 PROJECT_NAME = "default"
-WAREHOUSE_NAME = "demo-garage"
 
 GARAGE_ADMIN_TOKEN = os.getenv("GARAGE_ADMIN_TOKEN", "dev-garage-admin-token")
 GARAGE_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID", "GK00112233445566778899AABB")
@@ -31,6 +32,9 @@ class LakekeeperError(RuntimeError):
     """Raised when Lakekeeper bootstrap fails."""
 
 
+logger = structlog.get_logger(__name__)
+
+
 def _as_list(value: object | None) -> list[object]:
     if isinstance(value, list):
         return value
@@ -44,6 +48,7 @@ def _request_with_base(
     payload: dict[str, object] | None = None,
     expected_status: int | set[int] | None = None,
     headers: dict[str, str] | None = None,
+    parse_json: bool = True,
 ) -> dict[str, object] | None:
     url = f"{base_url}{path}"
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
@@ -68,7 +73,7 @@ def _request_with_base(
                 f"Unexpected status {status} for {method} {path}: {body or 'empty response'}"
             )
 
-    if not body:
+    if not body or not parse_json:
         return None
     try:
         return json.loads(body)
@@ -83,6 +88,7 @@ def _request(
     path: str,
     payload: dict[str, object] | None = None,
     expected_status: int | set[int] | None = None,
+    parse_json: bool = True,
 ) -> dict[str, object] | None:
     return _request_with_base(
         base_url=LAKEKEEPER_BASE_URL,
@@ -90,6 +96,7 @@ def _request(
         path=path,
         payload=payload,
         expected_status=expected_status,
+        parse_json=parse_json,
     )
 
 
@@ -98,6 +105,7 @@ def _garage_request(
     path: str,
     payload: dict[str, object] | None = None,
     expected_status: int | set[int] | None = None,
+    parse_json: bool = True,
 ) -> dict[str, object] | None:
     headers = {"Authorization": f"Bearer {GARAGE_ADMIN_TOKEN}"}
     return _request_with_base(
@@ -107,20 +115,16 @@ def _garage_request(
         payload=payload,
         expected_status=expected_status,
         headers=headers,
+        parse_json=parse_json,
     )
 
 
 def _wait_for_garage_health() -> None:
     for _ in range(30):
         try:
-            req = request.Request(f"{GARAGE_ADMIN_BASE_URL}/health", method="GET")
-            with request.urlopen(req, timeout=10) as response:
-                if response.status in {200, 503}:
-                    return
-        except error.HTTPError as exc:
-            if exc.code in {200, 503}:
-                return
-        except error.URLError:
+            _garage_request("GET", "/v2/GetClusterStatus", expected_status=200)
+            return
+        except LakekeeperError:
             pass
         time.sleep(1)
     raise LakekeeperError("Garage did not become healthy in time")
@@ -136,18 +140,16 @@ def _setup_garage_bucket_and_key() -> tuple[str, str]:
             "secretAccessKey": GARAGE_SECRET_ACCESS_KEY,
         },
         expected_status={200, 409},
+        parse_json=False,
     )
 
-    try:
-        _garage_request(
-            "POST",
-            "/v2/CreateBucket",
-            {"globalAlias": GARAGE_BUCKET_NAME},
-            expected_status={200, 201, 204, 409},
-        )
-    except LakekeeperError as exc:
-        if "already" not in str(exc).lower():
-            raise
+    _garage_request(
+        "POST",
+        "/v2/CreateBucket",
+        {"globalAlias": GARAGE_BUCKET_NAME},
+        expected_status={200, 201, 204, 409},
+        parse_json=False,
+    )
 
     encoded_bucket = parse.quote(GARAGE_BUCKET_NAME, safe="")
     bucket_info = _garage_request(
@@ -167,6 +169,7 @@ def _setup_garage_bucket_and_key() -> tuple[str, str]:
             "permissions": {"owner": True, "read": True, "write": True},
         },
         expected_status={200, 201, 204},
+        parse_json=False,
     )
     return GARAGE_ACCESS_KEY_ID, GARAGE_SECRET_ACCESS_KEY
 
@@ -341,7 +344,7 @@ def main() -> None:
     project_id = _ensure_project()
     warehouse_id = _ensure_warehouse(project_id, access_key_id, secret_access_key)
     _write_catalog_config()
-    print(f"Lakekeeper configured with warehouse {warehouse_id}")
+    logger.info("Lakekeeper configured", warehouse_id=warehouse_id)
 
 
 if __name__ == "__main__":
