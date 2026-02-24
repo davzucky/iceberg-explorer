@@ -3,8 +3,7 @@
   "dockerComposeFile": "docker-compose.yml",
   "service": "app",
   "containerUser": "vscode",
-  "workspaceFolder": "/workspace/iceberg-explorer",
-  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace/iceberg-explorer,type=bind",
+  "workspaceFolder": "/workspace/${localWorkspaceFolderBasename}",
   "initializeCommand": {
     "extractGitGlobals": "git config -l --global --include > .gitconfig.global",
     "extractGitLocals": "git config -l --local --include > .gitconfig.local",
@@ -32,6 +31,9 @@
       "pythonVersion": "3.13",
       "installRuff": true,
       "installUV": true
+    },
+    "ghcr.io/davzucky/devcontainers-features-wolfi/prek:1.0.0": {
+      "version": "latest"
     },
     "ghcr.io/davzucky/devcontainers-features-wolfi/node:1": {
       "nodeVersion": "20",
@@ -63,7 +65,11 @@
       }
     }
   },
-  "postCreateCommand": "python /workspace/iceberg-explorer/scripts/bootstrap_lakekeeper.py && uv sync --all-extras && .devcontainer/scripts/install-prek && uv run python /workspace/iceberg-explorer/scripts/seed_data.py",
+  "postCreateCommand": {
+    "bootstrapLakekeeper": "python /workspace/iceberg-explorer/scripts/bootstrap_lakekeeper.py",
+    "syncDependencies": "uv sync --all-extras",
+    "seedData": "uv run python /workspace/iceberg-explorer/scripts/seed_data.py"
+  },
   "containerEnv": {
     "ICEBERG_EXPLORER_CATALOG__TYPE": "rest",
     "ICEBERG_EXPLORER_CONFIG": "/home/vscode/.config/iceberg-explorer/lakekeeper-config.json",
