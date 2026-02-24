@@ -67,8 +67,7 @@
   },
   "postCreateCommand": {
     "syncDependencies": "uv sync --all-extras",
-    "bootstrapLakekeeper": "uv run python /workspace/iceberg-explorer/scripts/bootstrap_lakekeeper.py",
-    "seedData": "uv run python /workspace/iceberg-explorer/scripts/seed_data.py"
+    "bootstrapAndSeed": "uv run python /workspace/iceberg-explorer/scripts/bootstrap_lakekeeper.py && uv run python /workspace/iceberg-explorer/scripts/seed_data.py"
   },
   "containerEnv": {
     "ICEBERG_EXPLORER_CATALOG__TYPE": "rest",
