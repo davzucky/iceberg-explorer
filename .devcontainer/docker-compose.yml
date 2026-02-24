@@ -24,7 +24,7 @@ services:
       - "3903:3903"
     volumes:
       - ./garage.toml:/etc/garage.toml:ro
-    command: server
+    command: ["/garage", "server"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3903/health"]
       interval: 10s
