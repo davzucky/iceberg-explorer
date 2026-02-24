@@ -39,7 +39,7 @@ jobs:
 
       - name: Verify service endpoints
         run: |
-          curl --fail --retry 15 --retry-delay 2 --retry-connrefused http://localhost:3903/health
+          curl --fail --retry 15 --retry-delay 2 --retry-connrefused -H "Authorization: Bearer dev-garage-admin-token" http://localhost:3903/v2/GetClusterStatus
           curl --fail --retry 15 --retry-delay 2 --retry-connrefused http://localhost:8181/health
 
       - name: Build Docker image
