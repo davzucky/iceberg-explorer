@@ -210,3 +210,7 @@ __marimo__/
 .agents/skills/dev-browser/node_modules/
 .agents/skills/dev-browser/profiles/
 .agents/skills/dev-browser/tmp/
+
+# Local git config exports from devcontainer init
+.gitconfig.global
+.gitconfig.local
