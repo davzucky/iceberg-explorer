@@ -8,46 +8,28 @@ services:
     volumes:
       - ..:/workspace/iceberg-explorer:cached
     command: sleep infinity
-    network_mode: service:minio
+    network_mode: service:garage
     depends_on:
-      minio:
+      garage:
         condition: service_healthy
-      minio-init:
-        condition: service_completed_successfully
       lakekeeper:
         condition: service_healthy
     environment:
       - DEVELOPMENT=true
 
-  minio:
-    image: minio/minio:latest
+  garage:
+    image: dxflrs/garage:v2.2.0
     ports:
-      - "9000:9000"
-      - "9001:9001"
-    environment:
-      - MINIO_ROOT_USER=minioadmin
-      - MINIO_ROOT_PASSWORD=minioadmin
-    command: server /data --console-address ":9001"
+      - "3900:3900"
+      - "3903:3903"
+    volumes:
+      - ../docker/garage.toml:/etc/garage.toml:ro
+    command: ["/garage", "server"]
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ["CMD", "/garage", "status"]
       interval: 10s
       timeout: 5s
       retries: 5
-
-  minio-init:
-    image: minio/mc:latest
-    depends_on:
-      minio:
-        condition: service_healthy
-    environment:
-      - MINIO_ROOT_USER=minioadmin
-      - MINIO_ROOT_PASSWORD=minioadmin
-    entrypoint: >
-      /bin/sh -c "
-      sleep 5 &&
-      /usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadmin &&
-      /usr/bin/mc mb myminio/iceberg-warehouse --ignore-existing
-      "
 
   postgres:
     image: postgres:17
@@ -60,8 +42,6 @@ services:
       timeout: 10s
       retries: 2
       start_period: 10s
-    volumes:
-      - volume-lakekeeper:/var/lib/postgresql/data
 
   migrate:
     image: ${LAKEKEEPER__SERVER_IMAGE:-quay.io/lakekeeper/catalog:latest-main}
@@ -107,6 +87,3 @@ services:
       timeout: 10s
       retries: 3
       start_period: 3s
-
-volumes:
-  volume-lakekeeper:

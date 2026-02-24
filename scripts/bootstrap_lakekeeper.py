@@ -3,17 +3,36 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
-from urllib import error, request
+from urllib import error, parse, request
 
+import structlog
+
+GARAGE_ADMIN_BASE_URL = os.getenv("GARAGE_ADMIN_BASE_URL", "http://localhost:3903")
 LAKEKEEPER_BASE_URL = "http://lakekeeper:8181"
+GARAGE_BUCKET_NAME = "iceberg-warehouse"
 PROJECT_NAME = "default"
-WAREHOUSE_NAME = "demo"
+
+GARAGE_ADMIN_TOKEN = os.getenv("GARAGE_ADMIN_TOKEN", "dev-garage-admin-token")
+GARAGE_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID", "GK00112233445566778899AABB")
+GARAGE_SECRET_ACCESS_KEY = os.getenv(
+    "AWS_SECRET_ACCESS_KEY",
+    "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
+)
+GARAGE_S3_ENDPOINT = os.getenv("AWS_ENDPOINT_URL", "http://garage:3900")
+WAREHOUSE_NAME = os.getenv(
+    "ICEBERG_EXPLORER_WAREHOUSE_NAME",
+    f"demo-garage-{int(time.time())}",
+)
 
 
 class LakekeeperError(RuntimeError):
     """Raised when Lakekeeper bootstrap fails."""
+
+
+logger = structlog.get_logger(__name__)
 
 
 def _as_list(value: object | None) -> list[object]:
@@ -22,16 +41,21 @@ def _as_list(value: object | None) -> list[object]:
     return []
 
 
-def _request(
+def _request_with_base(
+    base_url: str,
     method: str,
     path: str,
     payload: dict[str, object] | None = None,
     expected_status: int | set[int] | None = None,
+    headers: dict[str, str] | None = None,
+    parse_json: bool = True,
 ) -> dict[str, object] | None:
-    url = f"{LAKEKEEPER_BASE_URL}{path}"
+    url = f"{base_url}{path}"
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
-    headers = {"Content-Type": "application/json"} if payload is not None else {}
-    req = request.Request(url, data=data, headers=headers, method=method)
+    final_headers = dict(headers or {})
+    if payload is not None:
+        final_headers["Content-Type"] = "application/json"
+    req = request.Request(url, data=data, headers=final_headers, method=method)
     try:
         with request.urlopen(req, timeout=10) as response:
             status = response.status
@@ -40,7 +64,7 @@ def _request(
         status = exc.code
         body = exc.read().decode("utf-8") if exc.fp else ""
     except error.URLError as exc:
-        raise LakekeeperError(f"Failed to reach Lakekeeper at {url}: {exc}") from exc
+        raise LakekeeperError(f"Failed to reach {base_url}: {exc}") from exc
 
     if expected_status is not None:
         expected = {expected_status} if isinstance(expected_status, int) else set(expected_status)
@@ -49,7 +73,7 @@ def _request(
                 f"Unexpected status {status} for {method} {path}: {body or 'empty response'}"
             )
 
-    if not body:
+    if not body or not parse_json:
         return None
     try:
         return json.loads(body)
@@ -57,6 +81,145 @@ def _request(
         raise LakekeeperError(
             f"Failed to parse JSON response from {method} {path}: {body}"
         ) from exc
+
+
+def _request(
+    method: str,
+    path: str,
+    payload: dict[str, object] | None = None,
+    expected_status: int | set[int] | None = None,
+    parse_json: bool = True,
+) -> dict[str, object] | None:
+    return _request_with_base(
+        base_url=LAKEKEEPER_BASE_URL,
+        method=method,
+        path=path,
+        payload=payload,
+        expected_status=expected_status,
+        parse_json=parse_json,
+    )
+
+
+def _garage_request(
+    method: str,
+    path: str,
+    payload: dict[str, object] | None = None,
+    expected_status: int | set[int] | None = None,
+    parse_json: bool = True,
+) -> dict[str, object] | None:
+    headers = {"Authorization": f"Bearer {GARAGE_ADMIN_TOKEN}"}
+    return _request_with_base(
+        base_url=GARAGE_ADMIN_BASE_URL,
+        method=method,
+        path=path,
+        payload=payload,
+        expected_status=expected_status,
+        headers=headers,
+        parse_json=parse_json,
+    )
+
+
+def _wait_for_garage_health() -> None:
+    for _ in range(30):
+        try:
+            _garage_request("GET", "/v2/GetClusterStatus", expected_status=200)
+            return
+        except LakekeeperError:
+            pass
+        time.sleep(1)
+    raise LakekeeperError("Garage did not become healthy in time")
+
+
+def _setup_garage_bucket_and_key() -> tuple[str, str]:
+    _garage_request(
+        "POST",
+        "/v2/ImportKey",
+        {
+            "name": "iceberg-explorer-dev",
+            "accessKeyId": GARAGE_ACCESS_KEY_ID,
+            "secretAccessKey": GARAGE_SECRET_ACCESS_KEY,
+        },
+        expected_status={200, 409},
+        parse_json=False,
+    )
+
+    _garage_request(
+        "POST",
+        "/v2/CreateBucket",
+        {"globalAlias": GARAGE_BUCKET_NAME},
+        expected_status={200, 201, 204, 409},
+        parse_json=False,
+    )
+
+    encoded_bucket = parse.quote(GARAGE_BUCKET_NAME, safe="")
+    bucket_info = _garage_request(
+        "GET",
+        f"/v2/GetBucketInfo?globalAlias={encoded_bucket}",
+        expected_status=200,
+    )
+    if not bucket_info or "id" not in bucket_info:
+        raise LakekeeperError("Garage bucket lookup did not return an id")
+
+    _garage_request(
+        "POST",
+        "/v2/AllowBucketKey",
+        {
+            "bucketId": str(bucket_info["id"]),
+            "accessKeyId": GARAGE_ACCESS_KEY_ID,
+            "permissions": {"owner": True, "read": True, "write": True},
+        },
+        expected_status={200, 201, 204},
+        parse_json=False,
+    )
+    return GARAGE_ACCESS_KEY_ID, GARAGE_SECRET_ACCESS_KEY
+
+
+def _ensure_garage_layout() -> None:
+    status = _garage_request("GET", "/v2/GetClusterStatus", expected_status=200)
+    nodes = _as_list(status.get("nodes") if status else None)
+    if not nodes:
+        raise LakekeeperError("Garage cluster status did not return any nodes")
+
+    node = next(
+        (item for item in nodes if isinstance(item, dict) and item.get("isUp")),
+        nodes[0],
+    )
+    if not isinstance(node, dict):
+        raise LakekeeperError("Garage cluster status returned an unexpected node payload")
+    node_id = node.get("id")
+    if not isinstance(node_id, str) or not node_id:
+        raise LakekeeperError("Garage cluster status did not include a valid node id")
+
+    role = node.get("role")
+    if isinstance(role, dict) and role.get("capacity") is not None:
+        return
+
+    _garage_request(
+        "POST",
+        "/v2/UpdateClusterLayout",
+        {
+            "roles": [
+                {
+                    "id": node_id,
+                    "zone": "local",
+                    "capacity": 10 * 1024 * 1024 * 1024,
+                    "tags": ["dev"],
+                }
+            ]
+        },
+        expected_status=200,
+    )
+
+    layout_version = status.get("layoutVersion") if status else None
+    if not isinstance(layout_version, int):
+        raise LakekeeperError("Garage cluster status did not include a layout version")
+
+    _garage_request(
+        "POST",
+        "/v2/ApplyClusterLayout",
+        {"version": layout_version + 1},
+        expected_status=200,
+    )
 
 
 def _wait_for_health() -> None:
@@ -115,7 +278,7 @@ def _ensure_project() -> str:
     return str(response["project-id"])
 
 
-def _ensure_warehouse(project_id: str) -> str:
+def _ensure_warehouse(project_id: str, access_key_id: str, secret_access_key: str) -> str:
     response = _request("GET", "/management/v1/warehouse", expected_status=200) or {}
     if isinstance(response, dict):
         for warehouse in _as_list(response.get("warehouses")):
@@ -133,17 +296,17 @@ def _ensure_warehouse(project_id: str) -> str:
             "warehouse-name": WAREHOUSE_NAME,
             "storage-profile": {
                 "type": "s3",
-                "bucket": "iceberg-warehouse",
+                "bucket": GARAGE_BUCKET_NAME,
                 "region": "us-east-1",
-                "endpoint": "http://minio:9000",
+                "endpoint": GARAGE_S3_ENDPOINT,
                 "path-style-access": True,
                 "sts-enabled": False,
             },
             "storage-credential": {
                 "type": "s3",
                 "credential-type": "access-key",
-                "aws-access-key-id": "minioadmin",
-                "aws-secret-access-key": "minioadmin",
+                "aws-access-key-id": access_key_id,
+                "aws-secret-access-key": secret_access_key,
             },
         },
         expected_status={200, 201},
@@ -173,12 +336,15 @@ def _write_catalog_config() -> None:
 
 
 def main() -> None:
+    _wait_for_garage_health()
+    _ensure_garage_layout()
+    access_key_id, secret_access_key = _setup_garage_bucket_and_key()
     _wait_for_health()
     _bootstrap_catalog()
     project_id = _ensure_project()
-    warehouse_id = _ensure_warehouse(project_id)
+    warehouse_id = _ensure_warehouse(project_id, access_key_id, secret_access_key)
     _write_catalog_config()
-    print(f"Lakekeeper configured with warehouse {warehouse_id}")
+    logger.info("Lakekeeper configured", warehouse_id=warehouse_id)
 
 
 if __name__ == "__main__":

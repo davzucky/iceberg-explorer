@@ -29,17 +29,17 @@ jobs:
         run: uv sync --frozen --all-extras
 
       - name: Run Ruff
-        run: uv run ruff check src/ tests/
+        run: uv run ruff check src/ tests/ scripts/
 
       - name: Run tests
         run: uv run pytest --cov=src/iceberg_explorer --cov-report=term-missing
 
-      - name: Start Lakekeeper and MinIO services
+      - name: Start Lakekeeper and Garage services
         run: docker compose -f docker/docker-compose.ci.yml up -d
 
       - name: Verify service endpoints
         run: |
-          curl --fail --retry 15 --retry-delay 2 --retry-connrefused http://localhost:9000/minio/health/live
+          curl --fail --retry 15 --retry-delay 2 --retry-connrefused -H "Authorization: Bearer dev-garage-admin-token" http://localhost:3903/v2/GetClusterStatus
           curl --fail --retry 15 --retry-delay 2 --retry-connrefused http://localhost:8181/health
 
       - name: Build Docker image
