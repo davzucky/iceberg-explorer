@@ -8,16 +8,23 @@ import time
 from pathlib import Path
 from urllib import error, parse, request
 
-GARAGE_ADMIN_BASE_URL = "http://garage:3903"
+GARAGE_ADMIN_BASE_URL = os.getenv("GARAGE_ADMIN_BASE_URL", "http://localhost:3903")
 LAKEKEEPER_BASE_URL = "http://lakekeeper:8181"
 GARAGE_BUCKET_NAME = "iceberg-warehouse"
 PROJECT_NAME = "default"
-WAREHOUSE_NAME = "demo"
+WAREHOUSE_NAME = "demo-garage"
 
 GARAGE_ADMIN_TOKEN = os.getenv("GARAGE_ADMIN_TOKEN", "dev-garage-admin-token")
-GARAGE_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID", "minioadmin")
-GARAGE_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY", "minioadmin")
+GARAGE_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID", "GK00112233445566778899AABB")
+GARAGE_SECRET_ACCESS_KEY = os.getenv(
+    "AWS_SECRET_ACCESS_KEY",
+    "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
+)
 GARAGE_S3_ENDPOINT = os.getenv("AWS_ENDPOINT_URL", "http://garage:3900")
+WAREHOUSE_NAME = os.getenv(
+    "ICEBERG_EXPLORER_WAREHOUSE_NAME",
+    f"demo-garage-{int(time.time())}",
+)
 
 
 class LakekeeperError(RuntimeError):
@@ -106,33 +113,30 @@ def _garage_request(
 def _wait_for_garage_health() -> None:
     for _ in range(30):
         try:
-            _request_with_base(
-                base_url=GARAGE_ADMIN_BASE_URL,
-                method="GET",
-                path="/health",
-                expected_status=200,
-            )
-            return
-        except LakekeeperError:
-            time.sleep(1)
+            req = request.Request(f"{GARAGE_ADMIN_BASE_URL}/health", method="GET")
+            with request.urlopen(req, timeout=10) as response:
+                if response.status in {200, 503}:
+                    return
+        except error.HTTPError as exc:
+            if exc.code in {200, 503}:
+                return
+        except error.URLError:
+            pass
+        time.sleep(1)
     raise LakekeeperError("Garage did not become healthy in time")
 
 
-def _setup_garage_bucket_and_key() -> None:
-    try:
-        _garage_request(
-            "POST",
-            "/v2/ImportKey",
-            {
-                "name": "iceberg-explorer-dev",
-                "accessKeyId": GARAGE_ACCESS_KEY_ID,
-                "secretAccessKey": GARAGE_SECRET_ACCESS_KEY,
-            },
-            expected_status={200, 201, 204, 409},
-        )
-    except LakekeeperError as exc:
-        if "already" not in str(exc).lower():
-            raise
+def _setup_garage_bucket_and_key() -> tuple[str, str]:
+    _garage_request(
+        "POST",
+        "/v2/ImportKey",
+        {
+            "name": "iceberg-explorer-dev",
+            "accessKeyId": GARAGE_ACCESS_KEY_ID,
+            "secretAccessKey": GARAGE_SECRET_ACCESS_KEY,
+        },
+        expected_status={200, 409},
+    )
 
     try:
         _garage_request(
@@ -163,6 +167,55 @@ def _setup_garage_bucket_and_key() -> None:
             "permissions": {"owner": True, "read": True, "write": True},
         },
         expected_status={200, 201, 204},
+    )
+    return GARAGE_ACCESS_KEY_ID, GARAGE_SECRET_ACCESS_KEY
+
+
+def _ensure_garage_layout() -> None:
+    status = _garage_request("GET", "/v2/GetClusterStatus", expected_status=200)
+    nodes = _as_list(status.get("nodes") if status else None)
+    if not nodes:
+        raise LakekeeperError("Garage cluster status did not return any nodes")
+
+    node = next(
+        (item for item in nodes if isinstance(item, dict) and item.get("isUp")),
+        nodes[0],
+    )
+    if not isinstance(node, dict):
+        raise LakekeeperError("Garage cluster status returned an unexpected node payload")
+    node_id = node.get("id")
+    if not isinstance(node_id, str) or not node_id:
+        raise LakekeeperError("Garage cluster status did not include a valid node id")
+
+    role = node.get("role")
+    if isinstance(role, dict) and role.get("capacity") is not None:
+        return
+
+    _garage_request(
+        "POST",
+        "/v2/UpdateClusterLayout",
+        {
+            "roles": [
+                {
+                    "id": node_id,
+                    "zone": "local",
+                    "capacity": 10 * 1024 * 1024 * 1024,
+                    "tags": ["dev"],
+                }
+            ]
+        },
+        expected_status=200,
+    )
+
+    layout_version = status.get("layoutVersion") if status else None
+    if not isinstance(layout_version, int):
+        raise LakekeeperError("Garage cluster status did not include a layout version")
+
+    _garage_request(
+        "POST",
+        "/v2/ApplyClusterLayout",
+        {"version": layout_version + 1},
+        expected_status=200,
     )
 
 
@@ -222,7 +275,7 @@ def _ensure_project() -> str:
     return str(response["project-id"])
 
 
-def _ensure_warehouse(project_id: str) -> str:
+def _ensure_warehouse(project_id: str, access_key_id: str, secret_access_key: str) -> str:
     response = _request("GET", "/management/v1/warehouse", expected_status=200) or {}
     if isinstance(response, dict):
         for warehouse in _as_list(response.get("warehouses")):
@@ -249,8 +302,8 @@ def _ensure_warehouse(project_id: str) -> str:
             "storage-credential": {
                 "type": "s3",
                 "credential-type": "access-key",
-                "aws-access-key-id": GARAGE_ACCESS_KEY_ID,
-                "aws-secret-access-key": GARAGE_SECRET_ACCESS_KEY,
+                "aws-access-key-id": access_key_id,
+                "aws-secret-access-key": secret_access_key,
             },
         },
         expected_status={200, 201},
@@ -281,11 +334,12 @@ def _write_catalog_config() -> None:
 
 def main() -> None:
     _wait_for_garage_health()
-    _setup_garage_bucket_and_key()
+    _ensure_garage_layout()
+    access_key_id, secret_access_key = _setup_garage_bucket_and_key()
     _wait_for_health()
     _bootstrap_catalog()
     project_id = _ensure_project()
-    warehouse_id = _ensure_warehouse(project_id)
+    warehouse_id = _ensure_warehouse(project_id, access_key_id, secret_access_key)
     _write_catalog_config()
     print(f"Lakekeeper configured with warehouse {warehouse_id}")
 

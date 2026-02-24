@@ -65,18 +65,14 @@
       }
     }
   },
-  "postCreateCommand": {
-    "bootstrapLakekeeper": "python /workspace/iceberg-explorer/scripts/bootstrap_lakekeeper.py",
-    "syncDependencies": "uv sync --all-extras",
-    "seedData": "uv run python /workspace/iceberg-explorer/scripts/seed_data.py"
-  },
+  "postCreateCommand": "python /workspace/iceberg-explorer/scripts/bootstrap_lakekeeper.py && uv sync --all-extras && uv run python /workspace/iceberg-explorer/scripts/seed_data.py",
   "containerEnv": {
     "ICEBERG_EXPLORER_CATALOG__TYPE": "rest",
     "ICEBERG_EXPLORER_CONFIG": "/home/vscode/.config/iceberg-explorer/lakekeeper-config.json",
     "ICEBERG_EXPLORER_SERVER__PORT": "8000",
     "GARAGE_ADMIN_TOKEN": "dev-garage-admin-token",
-    "AWS_ACCESS_KEY_ID": "minioadmin",
-    "AWS_SECRET_ACCESS_KEY": "minioadmin",
+    "AWS_ACCESS_KEY_ID": "GK00112233445566778899AABB",
+    "AWS_SECRET_ACCESS_KEY": "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
     "AWS_ENDPOINT_URL": "http://garage:3900",
     "AWS_REGION": "us-east-1"
   },
