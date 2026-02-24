@@ -3,13 +3,21 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
-from urllib import error, request
+from urllib import error, parse, request
 
+GARAGE_ADMIN_BASE_URL = "http://garage:3903"
 LAKEKEEPER_BASE_URL = "http://lakekeeper:8181"
+GARAGE_BUCKET_NAME = "iceberg-warehouse"
 PROJECT_NAME = "default"
 WAREHOUSE_NAME = "demo"
+
+GARAGE_ADMIN_TOKEN = os.getenv("GARAGE_ADMIN_TOKEN", "dev-garage-admin-token")
+GARAGE_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID", "minioadmin")
+GARAGE_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY", "minioadmin")
+GARAGE_S3_ENDPOINT = os.getenv("AWS_ENDPOINT_URL", "http://garage:3900")
 
 
 class LakekeeperError(RuntimeError):
@@ -22,16 +30,20 @@ def _as_list(value: object | None) -> list[object]:
     return []
 
 
-def _request(
+def _request_with_base(
+    base_url: str,
     method: str,
     path: str,
     payload: dict[str, object] | None = None,
     expected_status: int | set[int] | None = None,
+    headers: dict[str, str] | None = None,
 ) -> dict[str, object] | None:
-    url = f"{LAKEKEEPER_BASE_URL}{path}"
+    url = f"{base_url}{path}"
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
-    headers = {"Content-Type": "application/json"} if payload is not None else {}
-    req = request.Request(url, data=data, headers=headers, method=method)
+    final_headers = dict(headers or {})
+    if payload is not None:
+        final_headers["Content-Type"] = "application/json"
+    req = request.Request(url, data=data, headers=final_headers, method=method)
     try:
         with request.urlopen(req, timeout=10) as response:
             status = response.status
@@ -40,7 +52,7 @@ def _request(
         status = exc.code
         body = exc.read().decode("utf-8") if exc.fp else ""
     except error.URLError as exc:
-        raise LakekeeperError(f"Failed to reach Lakekeeper at {url}: {exc}") from exc
+        raise LakekeeperError(f"Failed to reach {base_url}: {exc}") from exc
 
     if expected_status is not None:
         expected = {expected_status} if isinstance(expected_status, int) else set(expected_status)
@@ -57,6 +69,101 @@ def _request(
         raise LakekeeperError(
             f"Failed to parse JSON response from {method} {path}: {body}"
         ) from exc
+
+
+def _request(
+    method: str,
+    path: str,
+    payload: dict[str, object] | None = None,
+    expected_status: int | set[int] | None = None,
+) -> dict[str, object] | None:
+    return _request_with_base(
+        base_url=LAKEKEEPER_BASE_URL,
+        method=method,
+        path=path,
+        payload=payload,
+        expected_status=expected_status,
+    )
+
+
+def _garage_request(
+    method: str,
+    path: str,
+    payload: dict[str, object] | None = None,
+    expected_status: int | set[int] | None = None,
+) -> dict[str, object] | None:
+    headers = {"Authorization": f"Bearer {GARAGE_ADMIN_TOKEN}"}
+    return _request_with_base(
+        base_url=GARAGE_ADMIN_BASE_URL,
+        method=method,
+        path=path,
+        payload=payload,
+        expected_status=expected_status,
+        headers=headers,
+    )
+
+
+def _wait_for_garage_health() -> None:
+    for _ in range(30):
+        try:
+            _request_with_base(
+                base_url=GARAGE_ADMIN_BASE_URL,
+                method="GET",
+                path="/health",
+                expected_status=200,
+            )
+            return
+        except LakekeeperError:
+            time.sleep(1)
+    raise LakekeeperError("Garage did not become healthy in time")
+
+
+def _setup_garage_bucket_and_key() -> None:
+    try:
+        _garage_request(
+            "POST",
+            "/v2/ImportKey",
+            {
+                "name": "iceberg-explorer-dev",
+                "accessKeyId": GARAGE_ACCESS_KEY_ID,
+                "secretAccessKey": GARAGE_SECRET_ACCESS_KEY,
+            },
+            expected_status={200, 201, 204, 409},
+        )
+    except LakekeeperError as exc:
+        if "already" not in str(exc).lower():
+            raise
+
+    try:
+        _garage_request(
+            "POST",
+            "/v2/CreateBucket",
+            {"globalAlias": GARAGE_BUCKET_NAME},
+            expected_status={200, 201, 204, 409},
+        )
+    except LakekeeperError as exc:
+        if "already" not in str(exc).lower():
+            raise
+
+    encoded_bucket = parse.quote(GARAGE_BUCKET_NAME, safe="")
+    bucket_info = _garage_request(
+        "GET",
+        f"/v2/GetBucketInfo?globalAlias={encoded_bucket}",
+        expected_status=200,
+    )
+    if not bucket_info or "id" not in bucket_info:
+        raise LakekeeperError("Garage bucket lookup did not return an id")
+
+    _garage_request(
+        "POST",
+        "/v2/AllowBucketKey",
+        {
+            "bucketId": str(bucket_info["id"]),
+            "accessKeyId": GARAGE_ACCESS_KEY_ID,
+            "permissions": {"owner": True, "read": True, "write": True},
+        },
+        expected_status={200, 201, 204},
+    )
 
 
 def _wait_for_health() -> None:
@@ -133,17 +240,17 @@ def _ensure_warehouse(project_id: str) -> str:
             "warehouse-name": WAREHOUSE_NAME,
             "storage-profile": {
                 "type": "s3",
-                "bucket": "iceberg-warehouse",
+                "bucket": GARAGE_BUCKET_NAME,
                 "region": "us-east-1",
-                "endpoint": "http://minio:9000",
+                "endpoint": GARAGE_S3_ENDPOINT,
                 "path-style-access": True,
                 "sts-enabled": False,
             },
             "storage-credential": {
                 "type": "s3",
                 "credential-type": "access-key",
-                "aws-access-key-id": "minioadmin",
-                "aws-secret-access-key": "minioadmin",
+                "aws-access-key-id": GARAGE_ACCESS_KEY_ID,
+                "aws-secret-access-key": GARAGE_SECRET_ACCESS_KEY,
             },
         },
         expected_status={200, 201},
@@ -173,6 +280,8 @@ def _write_catalog_config() -> None:
 
 
 def main() -> None:
+    _wait_for_garage_health()
+    _setup_garage_bucket_and_key()
     _wait_for_health()
     _bootstrap_catalog()
     project_id = _ensure_project()
