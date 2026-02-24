@@ -1,13 +1,13 @@
-# PRD: DevContainer Setup with Lakekeeper and MinIO
+# PRD: DevContainer Setup with Lakekeeper and Garage
 
 ## Introduction
 
-Create a devcontainer configuration for Iceberg Explorer that enables local development and testing against a real Apache Iceberg environment. The setup includes Lakekeeper (REST catalog) and MinIO (S3-compatible storage), allowing developers to work with the full stack without external dependencies. Sample data will be automatically seeded on container startup.
+Create a devcontainer configuration for Iceberg Explorer that enables local development and testing against a real Apache Iceberg environment. The setup includes Lakekeeper (REST catalog) and Garage (S3-compatible storage), allowing developers to work with the full stack without external dependencies. Sample data will be automatically seeded on container startup.
 
 ## Goals
 
 - Enable one-command local development environment setup via VS Code or `devcontainer up`
-- Provide a working Lakekeeper REST catalog connected to MinIO storage
+- Provide a working Lakekeeper REST catalog connected to Garage storage
 - Auto-seed demo namespaces, tables, and sample data for immediate testing
 - Ensure all services are healthy and interconnected before development starts
 - Keep the setup minimal and focused on core functionality
@@ -35,16 +35,16 @@ Create a devcontainer configuration for Iceberg Explorer that enables local deve
 - [ ] `uv run pytest` runs tests successfully
 - [ ] Container has `/workspace` mounted to project root
 
-### US-003: Configure MinIO S3 storage service
-**Description:** As a developer, I want MinIO running as S3-compatible storage so that Iceberg tables have a place to store data files.
+### US-003: Configure Garage S3 storage service
+**Description:** As a developer, I want Garage running as S3-compatible storage so that Iceberg tables have a place to store data files.
 
 **Acceptance Criteria:**
-- [ ] MinIO service defined in docker-compose.yml
-- [ ] MinIO accessible on port 9000 (S3 API) within container network
-- [ ] MinIO console accessible on port 9001 from host browser
+- [ ] Garage service defined in docker-compose.yml
+- [ ] Garage S3 API accessible on port 3900 within container network
+- [ ] Garage admin API accessible on port 3903 from host browser
 - [ ] Default credentials configured (minioadmin/minioadmin for dev)
 - [ ] `iceberg-warehouse` bucket automatically created on startup
-- [ ] MinIO healthcheck passes before dependent services start
+- [ ] Garage healthcheck passes before dependent services start
 
 ### US-004: Configure Lakekeeper REST catalog service
 **Description:** As a developer, I want Lakekeeper running as an Iceberg REST catalog so I can browse namespaces and tables through the Iceberg Explorer.
@@ -53,19 +53,19 @@ Create a devcontainer configuration for Iceberg Explorer that enables local deve
 - [ ] Lakekeeper service defined in docker-compose.yml
 - [ ] PostgreSQL service defined for Lakekeeper metadata storage
 - [ ] Lakekeeper REST API accessible at `http://lakekeeper:8181/catalog` within container network
-- [ ] Lakekeeper configured to use MinIO as storage backend
+- [ ] Lakekeeper configured to use Garage as storage backend
 - [ ] Lakekeeper healthcheck passes before app container starts
 - [ ] A default warehouse named "demo" is configured
 
 ### US-005: Configure environment variables for Iceberg Explorer
-**Description:** As a developer, I want environment variables pre-configured so that Iceberg Explorer connects to Lakekeeper and MinIO automatically.
+**Description:** As a developer, I want environment variables pre-configured so that Iceberg Explorer connects to Lakekeeper and Garage automatically.
 
 **Acceptance Criteria:**
 - [ ] `ICEBERG_EXPLORER_CATALOG__TYPE=rest` is set
 - [ ] `ICEBERG_EXPLORER_CATALOG__URI=http://lakekeeper:8181/catalog` is set
 - [ ] `ICEBERG_EXPLORER_CATALOG__WAREHOUSE=demo` is set
-- [ ] AWS credentials for MinIO access are configured
-- [ ] `AWS_ENDPOINT_URL=http://minio:9000` is set
+- [ ] AWS credentials for Garage access are configured
+- [ ] `AWS_ENDPOINT_URL=http://garage:3900` is set
 - [ ] Application starts without manual configuration
 
 ### US-006: Create data seeding script
@@ -93,17 +93,17 @@ Create a devcontainer configuration for Iceberg Explorer that enables local deve
 ## Functional Requirements
 
 - FR-1: The devcontainer must use Docker Compose for multi-container orchestration
-- FR-2: The MinIO service must create the `iceberg-warehouse` bucket on startup using an init container or entrypoint script
+- FR-2: Garage must have the `iceberg-warehouse` bucket and access key configured before seeding
 - FR-3: The Lakekeeper service must wait for PostgreSQL to be healthy before starting
 - FR-4: The development container must wait for Lakekeeper to be healthy before running post-create commands
 - FR-5: Environment variables must be set via `containerEnv` in devcontainer.json
 - FR-6: The seed script must use PyIceberg or DuckDB Iceberg extension to create tables
-- FR-7: Port 8000 (app), 9001 (MinIO console) must be forwarded to host
+- FR-7: Ports 8000 (app), 3900 (Garage S3), and 3903 (Garage admin) must be forwarded to host
 - FR-8: The devcontainer must work with both VS Code Dev Containers extension and `devcontainer` CLI
 
 ## Non-Goals
 
-- Authentication/authorization for Lakekeeper or MinIO (dev-only credentials are fine)
+- Authentication/authorization for Lakekeeper or Garage beyond dev defaults
 - Persistent storage volumes (ephemeral storage acceptable for dev)
 - Production-grade security configuration
 - Spark or other heavy query engines
@@ -114,7 +114,7 @@ Create a devcontainer configuration for Iceberg Explorer that enables local deve
 ## Technical Considerations
 
 - Use official `lakekeeper/lakekeeper` Docker image
-- Use official `minio/minio` Docker image
+- Use official `dxflrs/garage` Docker image
 - Use `postgres:15` or later for Lakekeeper metadata
 - Consider using `ghcr.io/astral-sh/uv` feature for uv installation
 - Network mode should allow inter-container communication via service names
