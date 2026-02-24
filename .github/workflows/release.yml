@@ -29,6 +29,14 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || github.ref }}
 
+      - name: Authorize manual release trigger
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if [ "${{ github.actor }}" != "davzucky" ]; then
+            echo "Only davzucky can trigger manual releases."
+            exit 1
+          fi
+
       - name: Set up Python 3.14
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
@@ -104,6 +112,8 @@ jobs:
       - name: Create and push release tag
         if: github.event_name == 'workflow_dispatch'
         run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch --tags --force
           if git rev-parse -q --verify "refs/tags/${{ steps.meta.outputs.tag }}" >/dev/null; then
             echo "Tag ${{ steps.meta.outputs.tag }} already exists"
