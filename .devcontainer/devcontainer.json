@@ -65,7 +65,11 @@
       }
     }
   },
-  "postCreateCommand": "python /workspace/iceberg-explorer/scripts/bootstrap_lakekeeper.py && uv sync --all-extras && uv run python /workspace/iceberg-explorer/scripts/seed_data.py",
+  "postCreateCommand": [
+    "python /workspace/iceberg-explorer/scripts/bootstrap_lakekeeper.py",
+    "uv sync --all-extras",
+    "uv run python /workspace/iceberg-explorer/scripts/seed_data.py"
+  ],
   "containerEnv": {
     "ICEBERG_EXPLORER_CATALOG__TYPE": "rest",
     "ICEBERG_EXPLORER_CONFIG": "/home/vscode/.config/iceberg-explorer/lakekeeper-config.json",
@@ -76,12 +80,5 @@
     "AWS_ENDPOINT_URL": "http://garage:3900",
     "AWS_REGION": "us-east-1"
   },
-  "remoteUser": "vscode",
-  "forwardPorts": [8000, 3900, 3903],
-  "portsAttributes": {
-    "8000": {
-      "label": "Iceberg Explorer",
-      "onAutoForward": "notify"
-    }
-  }
+  "remoteUser": "vscode"
 }
