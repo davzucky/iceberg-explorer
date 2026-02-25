@@ -16,6 +16,42 @@ High-performance web application for interactive exploration of Apache Iceberg d
 - **Frontend**: HTMX, Alpine.js, Tailwind CSS
 - **Observability**: OpenTelemetry, structlog
 
+## Quick Start (Docker)
+
+Run the latest image from GHCR:
+
+```bash
+docker run --rm -p 8080:8080 \
+  -e ICEBERG_EXPLORER_CATALOG__TYPE=rest \
+  -e ICEBERG_EXPLORER_CATALOG__URI=http://<catalog-host>:8181 \
+  -e ICEBERG_EXPLORER_CATALOG__NAME=default \
+  ghcr.io/davzucky/iceberg-explorer:latest
+```
+
+Open `http://localhost:8080` in your browser.
+
+### Environment Variables
+
+These are the main environment variables end users typically set when running with Docker.
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `ICEBERG_EXPLORER_CATALOG__TYPE` | Yes | Catalog type: `rest` (default) or `local`. |
+| `ICEBERG_EXPLORER_CATALOG__URI` | Yes for `rest` | REST catalog endpoint (for example, `http://lakekeeper:8181`). |
+| `ICEBERG_EXPLORER_CATALOG__WAREHOUSE` | Yes for `local` | Warehouse location for local catalog mode. |
+| `ICEBERG_EXPLORER_CATALOG__NAME` | No | DuckDB attachment name (default: `default`). |
+| `ICEBERG_EXPLORER_CATALOG__TOKEN` | No | Bearer token for authenticated REST catalogs. |
+| `ICEBERG_EXPLORER_CATALOG__CREDENTIAL` | No | Catalog credential string when required by your catalog. |
+| `ICEBERG_EXPLORER_CATALOG__S3__ENDPOINT` | No | S3-compatible endpoint URL for table data access. |
+| `ICEBERG_EXPLORER_CATALOG__S3__ACCESS_KEY_ID` | No | S3 access key ID. |
+| `ICEBERG_EXPLORER_CATALOG__S3__SECRET_ACCESS_KEY` | No | S3 secret access key. |
+| `ICEBERG_EXPLORER_CATALOG__S3__REGION` | No | S3 region. |
+| `ICEBERG_EXPLORER_SERVER__PORT` | No | HTTP server port inside the container (default: `8080`). |
+
+## Screenshot
+
+![Iceberg Explorer screenshot](./screenshot.png)
+
 ## Development
 
 ### Prerequisites
