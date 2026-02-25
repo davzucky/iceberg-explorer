@@ -1,6 +1,6 @@
 [project]
 name = "iceberg-explorer"
-version = "0.1.0"
+version = "0.1.1"
 description = "High-performance web application for interactive exploration of Apache Iceberg data lakes"
 readme = "README.md"
 requires-python = ">=3.11"
